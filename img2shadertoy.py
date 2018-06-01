@@ -103,7 +103,7 @@ if __name__ == '__main__':
 	print(");")
 
 	print("""
-void getBitmapColor( out vec4 col, in vec2 uv )
+vec4 getBitmapColor( in vec2 uv )
 {
 	int palette_index = 0;
 	if(uv.x >= 0.0 && uv.y >= 0.0 && uv.x <= 1.0 && uv.y <= 1.0)
@@ -117,12 +117,12 @@ void getBitmapColor( out vec4 col, in vec2 uv )
 		int bit_index = 31 - fetch_pos.x % 32;
 		palette_index = ( bitmap_long >> bit_index ) & 1;
 	}
-	col = palette[palette_index];
+	return palette[palette_index];
 }
 
 void mainImage( out vec4 fragColor, in vec2 fragCoord )
 {
 	vec2 uv = fragCoord/iResolution.y;
-	getBitmapColor( fragColor, uv );
+	fragColor = getBitmapColor( uv );
 }
 """)
