@@ -7,7 +7,7 @@ Convert image to a Shadertoy script
 
 import os, sys, argparse, logging
 logging.basicConfig(format='-- %(message)s')
-logger = logging.getLogger('readbmp')
+logger = logging.getLogger('img2shadertoy')
 logger.setLevel(logging.DEBUG)
 
 if __name__ == '__main__':
