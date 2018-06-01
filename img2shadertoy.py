@@ -85,13 +85,13 @@ if __name__ == '__main__':
 		row_data[i] = data[row_index : row_index + row_size]
 
 	# Generate output
-	print("const ivec2 bitmap_size = ivec2({0}, {1});".format(image_width, image_height))
+	print("const vec2 bitmap_size = vec2({0}, {1});".format(image_width, image_height))
 	print("const int longs_per_line = {0};".format(row_size // 4))
 
-	print("const vec3[] palette = vec3[] (")
+	print("const vec4[] palette = vec4[] (")
 	for i in range(palette_size):
 		color = palette[i]
-		print("vec3({0:.2f}, {1:.2f}, {2:.2f})".format(color[0] / 255, color[1] / 255, color[2] / 255) + ("," if i != palette_size-1 else ""))
+		print("vec4({0:.2f}, {1:.2f}, {2:.2f}, 0)".format(color[0] / 255, color[1] / 255, color[2] / 255) + ("," if i != palette_size-1 else ""))
 	print(");")
 
 	print("const int[] bitmap = int[] (")
@@ -102,25 +102,27 @@ if __name__ == '__main__':
 		print(", ".join(hexvals) + ("," if i != image_height-1 else ""))
 	print(");")
 
-	print("""void mainImage( out vec4 fragColor, in vec2 fragCoord )
+	print("""
+void getBitmapColor( out vec4 col, in vec2 uv )
 {
-	vec2 uv = fragCoord/iResolution.y;
 	int palette_index = 0;
-
-	if(uv.x <= 1.0 && uv.y <= 1.0)
+	if(uv.x >= 0.0 && uv.y >= 0.0 && uv.x <= 1.0 && uv.y <= 1.0)
 	{
-		ivec2 fetch_pos = ivec2(uv.x * float(bitmap_size.x), uv.y * float(bitmap_size.y));
+		ivec2 fetch_pos = ivec2(uv * bitmap_size);
 		int line_index = fetch_pos.y * longs_per_line;
 
 		int long_index = line_index + fetch_pos.x / 32;
 		int bitmap_long = bitmap[long_index];
 
 		int bit_index = 31 - fetch_pos.x % 32;
-		int mask = 1 << bit_index;
-
-		palette_index = ((bitmap_long & mask) == 0) ? 0 : 1;
+		palette_index = ( bitmap_long >> bit_index ) & 1;
 	}
+	col = palette[palette_index];
+}
 
-	vec3 col = palette[palette_index];
-	fragColor = vec4(col,1.0);
-}""")
+void mainImage( out vec4 fragColor, in vec2 fragCoord )
+{
+	vec2 uv = fragCoord/iResolution.y;
+	getBitmapColor( fragColor, uv );
+}
+""")
