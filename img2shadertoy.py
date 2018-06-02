@@ -127,29 +127,8 @@ def outputBitmap( bmp_data ):
 		print(", ".join(hexvals) + ("," if i != bmp_data.image_height - 1 else ""))
 	print(");")
 
-def processOneBit( bmp_data ):
-	outputHeader( bmp_data )
-	outputPalette( bmp_data )
-	outputBitmap( bmp_data )
-
+def outputFooter( bmp_data ):
 	print("""
-int getPaletteIndexXY( in ivec2 fetch_pos )
-{
-	int palette_index = 0;
-	if( fetch_pos.x >= 0 && fetch_pos.y >= 0
-		&& fetch_pos.x < int( bitmap_size.x ) && fetch_pos.y < int( bitmap_size.y ) )
-	{
-		int line_index = fetch_pos.y * longs_per_line;
-
-		int long_index = line_index + fetch_pos.x / 32;
-		int bitmap_long = bitmap[ long_index ];
-
-		int bit_index = 31 - fetch_pos.x % 32;
-		palette_index = ( bitmap_long >> bit_index ) & 1;
-	}
-	return palette_index;
-}
-
 int getPaletteIndex( in vec2 uv )
 {
 	int palette_index = 0;
@@ -173,12 +152,46 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
 }
 """)
 
+def processOneBit( bmp_data ):
+	outputHeader( bmp_data )
+	outputPalette( bmp_data )
+	outputBitmap( bmp_data )
+
+	print("""
+int getPaletteIndexXY( in ivec2 fetch_pos )
+{
+	int palette_index = 0;
+	if( fetch_pos.x >= 0 && fetch_pos.y >= 0
+		&& fetch_pos.x < int( bitmap_size.x ) && fetch_pos.y < int( bitmap_size.y ) )
+	{
+		int line_index = fetch_pos.y * longs_per_line;
+
+		int long_index = line_index + fetch_pos.x / 32;
+		int bitmap_long = bitmap[ long_index ];
+
+		int bit_index = 31 - fetch_pos.x % 32;
+		palette_index = ( bitmap_long >> bit_index ) & 1;
+	}
+	return palette_index;
+}
+""")
+
+	outputFooter( bmp_data )
+
 def processFourBit( bmp_data ):
 	outputHeader( bmp_data )
 	outputPalette( bmp_data )
 	outputBitmap( bmp_data )
 
+	print("""
+int getPaletteIndexXY( in ivec2 fetch_pos )
+{
+
+}
+""")
 	raise RuntimeError("TODO")
+
+	outputFooter( bmp_data )
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
