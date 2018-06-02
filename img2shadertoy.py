@@ -66,8 +66,8 @@ def loadBMP( filepath ):
 
 	bits_per_pixel = int.from_bytes(data[28:30], byteorder='little')
 	logger.info("Bits per pixel {0}".format(bits_per_pixel))
-	if bits_per_pixel != 1:
-		raise RuntimeError("Only 1 bit per pixel supported")
+	if not ( bits_per_pixel != 1 or bits_per_pixel != 4 ):
+		raise RuntimeError("Only 1/4 bits per pixel supported")
 
 	compression_method = int.from_bytes(data[30:34], byteorder='little')
 	logger.info("Compression method {0}".format(compression_method))
@@ -107,15 +107,20 @@ def loadBMP( filepath ):
 		row_data,
 		)
 
-def processOneBit( bmp_data ):
+def outputHeader( bmp_data ):
 	print("const vec2 bitmap_size = vec2({0}, {1});".format(bmp_data.image_width, bmp_data.image_height))
 	print("const int longs_per_line = {0};".format(bmp_data.row_size // 4))
 
+def outputPalette( bmp_data ):
 	print("const vec4[] palette = vec4[] (")
 	for i in range(bmp_data.palette_size):
 		color = bmp_data.palette[i]
 		print("vec4({0:.2f}, {1:.2f}, {2:.2f}, 0)".format(color[0] / 255, color[1] / 255, color[2] / 255) + ("," if i != bmp_data.palette_size-1 else ""))
 	print(");")
+
+def processOneBit( bmp_data ):
+	outputHeader( bmp_data )
+	outputPalette( bmp_data )
 
 	print("const int[] bitmap = int[] (")
 	for i in range(bmp_data.image_height):
@@ -166,6 +171,11 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
 }
 """)
 
+def processFourBit( bmp_data ):
+	outputHeader( bmp_data )
+	outputPalette( bmp_data )
+	raise RuntimeError("TODO")
+
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
 	parser.add_argument("filename", help="path to bmp file")
@@ -175,5 +185,7 @@ if __name__ == '__main__':
 
 	if bmp_data.bits_per_pixel == 1:
 		processOneBit( bmp_data )
+	elif bmp_data.bits_per_pixel == 4:
+		processFourBit( bmp_data )
 	else:
 		raise RuntimeError( "Current bits per pixel not supported" )
