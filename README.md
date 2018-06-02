@@ -1,6 +1,7 @@
 # img2shadertoy
 Convert image into Shadertoy script that displays it
-* Example: https://www.shadertoy.com/view/lsVBzW
+* Examples:
+** 1 bit image: https://www.shadertoy.com/view/lsVBzW
+** 4 bit image: https://www.shadertoy.com/view/4sGBzm
 * Redirect output to text file for result
-* Only 1-bit BMP files are supported at the moment
 * Image width must be multiple of 32

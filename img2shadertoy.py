@@ -186,10 +186,21 @@ def processFourBit( bmp_data ):
 	print("""
 int getPaletteIndexXY( in ivec2 fetch_pos )
 {
+	int palette_index = 0;
+	if( fetch_pos.x >= 0 && fetch_pos.y >= 0
+		&& fetch_pos.x < int( bitmap_size.x ) && fetch_pos.y < int( bitmap_size.y ) )
+	{
+		int line_index = fetch_pos.y * longs_per_line;
 
+		int long_index = line_index + fetch_pos.x / 8;
+		int bitmap_long = bitmap[ long_index ];
+
+		int nibble_index = 7 - fetch_pos.x % 8;
+		palette_index = ( bitmap_long >> ( nibble_index * 4 ) ) & 0xf;
+	}
+	return palette_index;
 }
 """)
-	raise RuntimeError("TODO")
 
 	outputFooter( bmp_data )
 
