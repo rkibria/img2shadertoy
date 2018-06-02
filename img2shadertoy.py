@@ -66,8 +66,6 @@ def loadBMP( filepath ):
 
 	bits_per_pixel = int.from_bytes(data[28:30], byteorder='little')
 	logger.info("Bits per pixel {0}".format(bits_per_pixel))
-	if not ( bits_per_pixel != 1 or bits_per_pixel != 4 ):
-		raise RuntimeError("Only 1/4 bits per pixel supported")
 
 	compression_method = int.from_bytes(data[30:34], byteorder='little')
 	logger.info("Compression method {0}".format(compression_method))
@@ -204,6 +202,32 @@ int getPaletteIndexXY( in ivec2 fetch_pos )
 
 	outputFooter( bmp_data )
 
+def processEightBit( bmp_data ):
+	outputHeader( bmp_data )
+	outputPalette( bmp_data )
+	outputBitmap( bmp_data )
+
+	print("""
+int getPaletteIndexXY( in ivec2 fetch_pos )
+{
+	int palette_index = 0;
+	if( fetch_pos.x >= 0 && fetch_pos.y >= 0
+		&& fetch_pos.x < int( bitmap_size.x ) && fetch_pos.y < int( bitmap_size.y ) )
+	{
+		int line_index = fetch_pos.y * longs_per_line;
+
+		int long_index = line_index + fetch_pos.x / 4;
+		int bitmap_long = bitmap[ long_index ];
+
+		int byte_index = 3 - fetch_pos.x % 4;
+		palette_index = ( bitmap_long >> ( byte_index * 8 ) ) & 0xff;
+	}
+	return palette_index;
+}
+""")
+
+	outputFooter( bmp_data )
+
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
 	parser.add_argument("filename", help="path to bmp file")
@@ -215,5 +239,7 @@ if __name__ == '__main__':
 		processOneBit( bmp_data )
 	elif bmp_data.bits_per_pixel == 4:
 		processFourBit( bmp_data )
+	elif bmp_data.bits_per_pixel == 8:
+		processEightBit( bmp_data )
 	else:
 		raise RuntimeError( "Current bits per pixel not supported" )
