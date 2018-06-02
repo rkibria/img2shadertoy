@@ -118,10 +118,7 @@ def outputPalette( bmp_data ):
 		print("vec4({0:.2f}, {1:.2f}, {2:.2f}, 0)".format(color[0] / 255, color[1] / 255, color[2] / 255) + ("," if i != bmp_data.palette_size-1 else ""))
 	print(");")
 
-def processOneBit( bmp_data ):
-	outputHeader( bmp_data )
-	outputPalette( bmp_data )
-
+def outputBitmap( bmp_data ):
 	print("const int[] bitmap = int[] (")
 	for i in range(bmp_data.image_height):
 		hexvals = []
@@ -129,6 +126,11 @@ def processOneBit( bmp_data ):
 			hexvals.append("0x" + bmp_data.row_data[i][k * 4 : (k+1) * 4].hex())
 		print(", ".join(hexvals) + ("," if i != bmp_data.image_height - 1 else ""))
 	print(");")
+
+def processOneBit( bmp_data ):
+	outputHeader( bmp_data )
+	outputPalette( bmp_data )
+	outputBitmap( bmp_data )
 
 	print("""
 int getPaletteIndexXY( in ivec2 fetch_pos )
@@ -174,6 +176,8 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
 def processFourBit( bmp_data ):
 	outputHeader( bmp_data )
 	outputPalette( bmp_data )
+	outputBitmap( bmp_data )
+
 	raise RuntimeError("TODO")
 
 if __name__ == '__main__':
