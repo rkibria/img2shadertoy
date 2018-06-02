@@ -6,20 +6,33 @@ Convert image to a Shadertoy script
 """
 
 import os, sys, argparse, logging
+
+from collections import namedtuple
+
+BMPData = namedtuple("BMPData",
+	[
+		"image_width",
+		"image_height",
+		"bits_per_pixel",
+		"palette_size",
+		"palette",
+		"row_size",
+		"row_data",
+	]
+	)
+
 logging.basicConfig(format='-- %(message)s')
 logger = logging.getLogger('img2shadertoy')
 logger.setLevel(logging.DEBUG)
 
-if __name__ == '__main__':
-	parser = argparse.ArgumentParser()
-	parser.add_argument("filename", help="path to bmp file")
-	args = parser.parse_args()
-
-	with open(args.filename, "rb") as binary_file:
+def loadBMP( filepath ):
+	"""
+	See https://en.wikipedia.org/wiki/BMP_file_format
+	"""
+	with open(filepath, "rb") as binary_file:
 		data = binary_file.read()
-		logger.info("Read file {0} into memory".format(args.filename))
+		logger.info("Read file {0} into memory".format(filepath))
 
-	# https://en.wikipedia.org/wiki/BMP_file_format
 	header_text = data[0:2].decode('utf-8')
 	logger.info("BMP header {0}".format(header_text))
 	if header_text != "BM":
@@ -27,7 +40,7 @@ if __name__ == '__main__':
 
 	filesize = int.from_bytes(data[2:6], byteorder='little')
 	logger.info("File size in header {0}".format(filesize))
-	if os.path.getsize(args.filename) != filesize:
+	if os.path.getsize(filepath) != filesize:
 		raise RuntimeError("Header reports incorrect file size")
 
 	imgdata_offset = int.from_bytes(data[10:14], byteorder='little')
@@ -84,22 +97,32 @@ if __name__ == '__main__':
 		row_index = imgdata_offset + i * row_size
 		row_data[i] = data[row_index : row_index + row_size]
 
-	# Generate output
-	print("const vec2 bitmap_size = vec2({0}, {1});".format(image_width, image_height))
-	print("const int longs_per_line = {0};".format(row_size // 4))
+	return BMPData(
+		image_width,
+		image_height,
+		bits_per_pixel,
+		palette_size,
+		palette,
+		row_size,
+		row_data,
+		)
+
+def processOneBit( bmp_data ):
+	print("const vec2 bitmap_size = vec2({0}, {1});".format(bmp_data.image_width, bmp_data.image_height))
+	print("const int longs_per_line = {0};".format(bmp_data.row_size // 4))
 
 	print("const vec4[] palette = vec4[] (")
-	for i in range(palette_size):
-		color = palette[i]
-		print("vec4({0:.2f}, {1:.2f}, {2:.2f}, 0)".format(color[0] / 255, color[1] / 255, color[2] / 255) + ("," if i != palette_size-1 else ""))
+	for i in range(bmp_data.palette_size):
+		color = bmp_data.palette[i]
+		print("vec4({0:.2f}, {1:.2f}, {2:.2f}, 0)".format(color[0] / 255, color[1] / 255, color[2] / 255) + ("," if i != bmp_data.palette_size-1 else ""))
 	print(");")
 
 	print("const int[] bitmap = int[] (")
-	for i in range(image_height):
+	for i in range(bmp_data.image_height):
 		hexvals = []
-		for k in range(row_size // 4):
-			hexvals.append("0x" + row_data[i][k * 4 : (k+1) * 4].hex())
-		print(", ".join(hexvals) + ("," if i != image_height-1 else ""))
+		for k in range(bmp_data.row_size // 4):
+			hexvals.append("0x" + bmp_data.row_data[i][k * 4 : (k+1) * 4].hex())
+		print(", ".join(hexvals) + ("," if i != bmp_data.image_height - 1 else ""))
 	print(");")
 
 	print("""
@@ -142,3 +165,15 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
 	fragColor = getBitmapColor( uv );
 }
 """)
+
+if __name__ == '__main__':
+	parser = argparse.ArgumentParser()
+	parser.add_argument("filename", help="path to bmp file")
+	args = parser.parse_args()
+
+	bmp_data = loadBMP( args.filename )
+
+	if bmp_data.bits_per_pixel == 1:
+		processOneBit( bmp_data )
+	else:
+		raise RuntimeError( "Current bits per pixel not supported" )
