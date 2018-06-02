@@ -103,26 +103,42 @@ if __name__ == '__main__':
 	print(");")
 
 	print("""
-vec4 getBitmapColor( in vec2 uv )
+int getPaletteIndexXY( in ivec2 fetch_pos )
 {
 	int palette_index = 0;
-	if(uv.x >= 0.0 && uv.y >= 0.0 && uv.x <= 1.0 && uv.y <= 1.0)
+	if( fetch_pos.x >= 0 && fetch_pos.y >= 0
+		&& fetch_pos.x < int( bitmap_size.x ) && fetch_pos.y < int( bitmap_size.y ) )
 	{
-		ivec2 fetch_pos = ivec2(uv * bitmap_size);
 		int line_index = fetch_pos.y * longs_per_line;
 
 		int long_index = line_index + fetch_pos.x / 32;
-		int bitmap_long = bitmap[long_index];
+		int bitmap_long = bitmap[ long_index ];
 
 		int bit_index = 31 - fetch_pos.x % 32;
 		palette_index = ( bitmap_long >> bit_index ) & 1;
 	}
-	return palette[palette_index];
+	return palette_index;
+}
+
+int getPaletteIndex( in vec2 uv )
+{
+	int palette_index = 0;
+	if( uv.x >= 0.0 && uv.y >= 0.0 && uv.x <= 1.0 && uv.y <= 1.0 )
+	{
+		ivec2 fetch_pos = ivec2( uv * bitmap_size );
+		palette_index = getPaletteIndexXY( fetch_pos );
+	}
+	return palette_index;
+}
+
+vec4 getBitmapColor( in vec2 uv )
+{
+	return palette[ getPaletteIndex( uv ) ];
 }
 
 void mainImage( out vec4 fragColor, in vec2 fragCoord )
 {
-	vec2 uv = fragCoord/iResolution.y;
+	vec2 uv = fragCoord / iResolution.y;
 	fragColor = getBitmapColor( uv );
 }
 """)
