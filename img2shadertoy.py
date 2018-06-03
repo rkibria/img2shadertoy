@@ -110,10 +110,10 @@ def outputHeader( bmp_data ):
 	print("const int longs_per_line = {0};".format(bmp_data.row_size // 4))
 
 def outputPalette( bmp_data ):
-	print("const vec4[] palette = vec4[] (")
+	print("const int[] palette = int[] (")
 	for i in range(bmp_data.palette_size):
 		color = bmp_data.palette[i]
-		print("vec4({0:.2f}, {1:.2f}, {2:.2f}, 0)".format(color[0] / 255, color[1] / 255, color[2] / 255) + ("," if i != bmp_data.palette_size-1 else ""))
+		print("0x00{0:02x}{1:02x}{2:02x}".format(color[2], color[1], color[0]) + ("," if i != bmp_data.palette_size-1 else ""))
 	print(");")
 
 def outputBitmap( bmp_data ):
@@ -138,9 +138,18 @@ int getPaletteIndex( in vec2 uv )
 	return palette_index;
 }
 
+vec4 getColorFromPalette( in int palette_index )
+{
+	int int_color = palette[ palette_index ];
+	return vec4( float( int_color & 0xff ) / 255.0,
+				float( ( int_color >> 8 ) & 0xff) / 255.0,
+				float( ( int_color >> 16 ) & 0xff) / 255.0,
+				0 );
+}
+
 vec4 getBitmapColor( in vec2 uv )
 {
-	return palette[ getPaletteIndex( uv ) ];
+	return getColorFromPalette( getPaletteIndex( uv ) );
 }
 
 void mainImage( out vec4 fragColor, in vec2 fragCoord )
