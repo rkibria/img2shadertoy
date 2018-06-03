@@ -130,11 +130,8 @@ def outputFooter( bmp_data ):
 int getPaletteIndex( in vec2 uv )
 {
 	int palette_index = 0;
-	if( uv.x >= 0.0 && uv.y >= 0.0 && uv.x <= 1.0 && uv.y <= 1.0 )
-	{
-		ivec2 fetch_pos = ivec2( uv * bitmap_size );
-		palette_index = getPaletteIndexXY( fetch_pos );
-	}
+	ivec2 fetch_pos = ivec2( uv * bitmap_size );
+	palette_index = getPaletteIndexXY( fetch_pos );
 	return palette_index;
 }
 
@@ -225,11 +222,11 @@ int getPaletteIndexXY( in ivec2 fetch_pos )
 	{
 		int line_index = fetch_pos.y * longs_per_line;
 
-		int long_index = line_index + fetch_pos.x / 4;
+		int long_index = line_index + ( fetch_pos.x >> 2 );
 		int bitmap_long = bitmap[ long_index ];
 
-		int byte_index = 3 - fetch_pos.x % 4;
-		palette_index = ( bitmap_long >> ( byte_index * 8 ) ) & 0xff;
+		int byte_index = 3 - ( fetch_pos.x & 0x03 );
+		palette_index = ( bitmap_long >> ( byte_index << 3 ) ) & 0xff;
 	}
 	return palette_index;
 }
