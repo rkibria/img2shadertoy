@@ -85,7 +85,6 @@ def loadBMP( filepath ):
 		green = data[palette_index + 1]
 		red = data[palette_index + 2]
 		palette[i] = (red, green, blue)
-	logger.info("Palette {0}".format(str(palette)))
 
 	row_size = int(int((bits_per_pixel * image_width + 31) / 32) * 4)
 	logger.info("Row size {0} bytes".format(row_size))
@@ -121,7 +120,18 @@ def outputBitmap( bmp_data ):
 	for i in range(bmp_data.image_height):
 		hexvals = []
 		for k in range(bmp_data.row_size // 4):
-			hexvals.append("0x" + bmp_data.row_data[i][k * 4 : (k+1) * 4].hex())
+			bitmapLong = bmp_data.row_data[i][k * 4 : (k+1) * 4]
+			if bmp_data.bits_per_pixel == 1:
+				# Reverse bits
+				bitStr = "{0:032b}".format(int.from_bytes(bitmapLong, byteorder='little'))
+				bitmapLong = int(bitStr[::-1], 2).to_bytes(4, byteorder='little')
+			elif bmp_data.bits_per_pixel == 4:
+				# Reverse nibbles
+				bitmapLong = int(bitmapLong.hex()[::-1], 16).to_bytes(4, byteorder='big')
+			elif bmp_data.bits_per_pixel == 8:
+				# Reverse endianness
+				bitmapLong = int.from_bytes(bitmapLong, byteorder='little').to_bytes(4, byteorder='big')
+			hexvals.append("0x" + bitmapLong.hex())
 		print(", ".join(hexvals) + ("," if i != bmp_data.image_height - 1 else ""))
 	print(");")
 
@@ -170,10 +180,10 @@ int getPaletteIndexXY( in ivec2 fetch_pos )
 	{
 		int line_index = fetch_pos.y * longs_per_line;
 
-		int long_index = line_index + fetch_pos.x / 32;
+		int long_index = line_index + ( fetch_pos.x >> 5 );
 		int bitmap_long = bitmap[ long_index ];
 
-		int bit_index = 31 - fetch_pos.x % 32;
+		int bit_index = fetch_pos.x & 0x1f;
 		palette_index = ( bitmap_long >> bit_index ) & 1;
 	}
 	return palette_index;
@@ -196,11 +206,11 @@ int getPaletteIndexXY( in ivec2 fetch_pos )
 	{
 		int line_index = fetch_pos.y * longs_per_line;
 
-		int long_index = line_index + fetch_pos.x / 8;
+		int long_index = line_index + ( fetch_pos.x >> 3 );
 		int bitmap_long = bitmap[ long_index ];
 
-		int nibble_index = 7 - fetch_pos.x % 8;
-		palette_index = ( bitmap_long >> ( nibble_index * 4 ) ) & 0xf;
+		int nibble_index = fetch_pos.x & 0x07;
+		palette_index = ( bitmap_long >> ( nibble_index << 2 ) ) & 0xf;
 	}
 	return palette_index;
 }
@@ -225,7 +235,7 @@ int getPaletteIndexXY( in ivec2 fetch_pos )
 		int long_index = line_index + ( fetch_pos.x >> 2 );
 		int bitmap_long = bitmap[ long_index ];
 
-		int byte_index = 3 - ( fetch_pos.x & 0x03 );
+		int byte_index = fetch_pos.x & 0x03;
 		palette_index = ( bitmap_long >> ( byte_index << 3 ) ) & 0xff;
 	}
 	return palette_index;
