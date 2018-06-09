@@ -7,115 +7,27 @@ Convert image to a Shadertoy script
 
 import os, sys, argparse, logging
 
-from collections import namedtuple
+import bmpfile
+import rle
+import bits
 
-BMPData = namedtuple("BMPData",
-	[
-		"image_width",
-		"image_height",
-		"bits_per_pixel",
-		"palette_size",
-		"palette",
-		"row_size",
-		"row_data",
-	]
-	)
+logging.basicConfig( format='-- %(message)s' )
+logger = logging.getLogger( 'img2shadertoy' )
+logger.setLevel( logging.DEBUG )
 
-logging.basicConfig(format='-- %(message)s')
-logger = logging.getLogger('img2shadertoy')
-logger.setLevel(logging.DEBUG)
 
-def loadBMP( filepath ):
-	"""
-	See https://en.wikipedia.org/wiki/BMP_file_format
-	"""
-	with open(filepath, "rb") as binary_file:
-		data = binary_file.read()
-		logger.info("Read file {0} into memory".format(filepath))
-
-	header_text = data[0:2].decode('utf-8')
-	logger.info("BMP header {0}".format(header_text))
-	if header_text != "BM":
-		raise RuntimeError("File has incorrect header, expected 'BM'")
-
-	filesize = int.from_bytes(data[2:6], byteorder='little')
-	logger.info("File size in header {0}".format(filesize))
-	if os.path.getsize(filepath) != filesize:
-		raise RuntimeError("Header reports incorrect file size")
-
-	imgdata_offset = int.from_bytes(data[10:14], byteorder='little')
-	logger.info("Image data offset {0}".format(imgdata_offset))
-
-	dib_header_size = int.from_bytes(data[14:18], byteorder='little')
-	logger.info("DIB header size {0}".format(dib_header_size))
-	if dib_header_size != 40:
-		raise RuntimeError("DIB header size 40 (BITMAPINFOHEADER) expected")
-
-	image_width = int.from_bytes(data[18:22], byteorder='little')
-	logger.info("Image width {0}".format(image_width))
-	if image_width % 32 != 0:
-		raise RuntimeError("Image width multiple of 32 expected")
-
-	image_height = int.from_bytes(data[22:26], byteorder='little')
-	logger.info("Image height {0}".format(image_height))
-
-	color_planes = int.from_bytes(data[26:28], byteorder='little')
-	logger.info("Color planes {0}".format(color_planes))
-	if color_planes != 1:
-		raise RuntimeError("1 color plane expected")
-
-	bits_per_pixel = int.from_bytes(data[28:30], byteorder='little')
-	logger.info("Bits per pixel {0}".format(bits_per_pixel))
-
-	compression_method = int.from_bytes(data[30:34], byteorder='little')
-	logger.info("Compression method {0}".format(compression_method))
-	if compression_method != 0:
-		raise RuntimeError("Only compression method 0 is supported")
-
-	image_size = int.from_bytes(data[34:38], byteorder='little')
-	logger.info("Raw image size {0}".format(image_size))
-
-	palette_size = int.from_bytes(data[46:50], byteorder='little')
-	logger.info("Palette size {0}".format(palette_size))
-
-	palette = [None] * palette_size
-	for i in range(palette_size):
-		palette_index = 14 + dib_header_size + i * 4
-		blue = data[palette_index]
-		green = data[palette_index + 1]
-		red = data[palette_index + 2]
-		palette[i] = (red, green, blue)
-
-	row_size = int(int((bits_per_pixel * image_width + 31) / 32) * 4)
-	logger.info("Row size {0} bytes".format(row_size))
-
-	row_data = [None] * image_height
-	for i in range(image_height):
-		row_index = imgdata_offset + i * row_size
-		row_data[i] = data[row_index : row_index + row_size]
-
-	return BMPData(
-		image_width,
-		image_height,
-		bits_per_pixel,
-		palette_size,
-		palette,
-		row_size,
-		row_data,
-		)
-
-def outputHeader( bmp_data ):
+def output_header( bmp_data ):
 	print("const vec2 bitmap_size = vec2({0}, {1});".format(bmp_data.image_width, bmp_data.image_height))
-	print("const int longs_per_line = {0};".format(bmp_data.row_size // 4))
 
-def outputPalette( bmp_data ):
+def output_palette( bmp_data ):
 	print("const int[] palette = int[] (")
 	for i in range(bmp_data.palette_size):
 		color = bmp_data.palette[i]
 		print("0x00{0:02x}{1:02x}{2:02x}".format(color[2], color[1], color[0]) + ("," if i != bmp_data.palette_size-1 else ""))
 	print(");")
 
-def outputBitmap( bmp_data ):
+def output_bitmap( bmp_data ):
+	print("const int longs_per_line = {0};".format(bmp_data.row_size // 4))
 	print("const int[] bitmap = int[] (")
 	for i in range(bmp_data.image_height):
 		hexvals = []
@@ -135,7 +47,7 @@ def outputBitmap( bmp_data ):
 		print(", ".join(hexvals) + ("," if i != bmp_data.image_height - 1 else ""))
 	print(");")
 
-def outputFooter( bmp_data ):
+def output_footer( bmp_data ):
 	print("""
 int getPaletteIndex( in vec2 uv )
 {
@@ -161,17 +73,127 @@ vec4 getBitmapColor( in vec2 uv )
 
 void mainImage( out vec4 fragColor, in vec2 fragCoord )
 {
-	vec2 uv = fragCoord / iResolution.y;
+	vec2 uv = fragCoord / bitmap_size;
 	fragColor = getBitmapColor( uv );
 }
 """)
 
-def processOneBit( bmp_data ):
-	outputHeader( bmp_data )
-	outputPalette( bmp_data )
-	outputBitmap( bmp_data )
+def sequences_to_bytes( seq ):
+	"""
+	Transforms result of rle.get_sequences() into a byte array.
+	Encoding:
+	- repeats start with a byte whose MSB is 1 and the lower bits are the count,
+	  followed by the value to repeat.
+	- sequences start with a byte whose MSB is 0 and the lower bits are the sequence length,
+	  followed by that number of bytes of the sequence.
+	"""
+	result = []
+	for s in seq:
+		if s[ 0 ] == "R":
+			count = s[ 1 ]
+			val = s[ 2 ]
+			while count != 0:
+				cur_reps = min( 128, count )
+				result.append( ( 0x80 | ( cur_reps - 1 ) ).to_bytes( 1, "little" ) )
+				result.append( bits.get_reverse_bits_byte( val.to_bytes( 1, "little" ) ) )
+				count -= cur_reps
+		else:
+			sequence = s[ 1 ]
+			seq_len = len( sequence )
+			seq_i = 0
+			while seq_len != 0:
+				cur_len = min( 128, seq_len )
+				result.append( ( cur_len - 1).to_bytes( 1, "little" ) )
+				for v in sequence[ seq_i : seq_i + cur_len ]:
+					result.append( bits.get_reverse_bits_byte( v.to_bytes( 1, "little" ) ) )
+				seq_i += cur_len
+				seq_len -= cur_len
+	return b''.join( result )
 
-	print("""
+def process_one_bit( bmp_data, rle_enabled ):
+	output_header( bmp_data )
+	output_palette( bmp_data )
+
+	if rle_enabled:
+		bitmap = bytes().join( bmp_data.row_data )
+		seq = rle.get_sequences( rle.get_repeat_counts( bitmap ), 3 )
+		encoded = sequences_to_bytes( seq )
+
+		print( "const int[] rle = int[] (" )
+		hexvals = []
+		for k in range( len( encoded ) // 4 ):
+			long_val = encoded[ k * 4 : ( k + 1 ) * 4 ]
+			long_val = int.from_bytes( long_val, byteorder='little' ).to_bytes( 4, byteorder='big' )
+			hexvals.append( "0x" + long_val.hex() )
+		print( ",\n".join( hexvals ) )
+		print( ");" )
+		print("""
+const int rle_len_bytes = rle.length() << 2;
+
+int get_rle_byte( in int byte_index )
+{
+	int long_val = rle[ byte_index >> 2 ];
+	return ( long_val >> ( ( byte_index & 0x03 ) << 3 ) ) & 0xff;
+}
+
+int get_uncompr_byte( in int byte_index )
+{
+	int rle_index = 0;
+	int cur_byte_index = 0;
+	while( rle_index < rle_len_bytes )
+	{
+		int cur_rle_byte = get_rle_byte( rle_index );
+		bool is_sequence = int( cur_rle_byte & 0x80 ) == 0;
+		int count = ( cur_rle_byte & 0x7f ) + 1;
+
+		if( byte_index >= cur_byte_index && byte_index < cur_byte_index + count )
+		{
+			if( is_sequence )
+			{
+				return get_rle_byte( rle_index + 1 + ( byte_index - cur_byte_index ) );
+			}
+			else
+			{
+				return get_rle_byte( rle_index + 1 );
+			}
+		}
+		else
+		{
+			if( is_sequence )
+			{
+				rle_index += count + 1;
+				cur_byte_index += count;
+			}
+			else
+			{
+				rle_index += 2;
+				cur_byte_index += count;
+			}
+		}
+	}
+
+	return 0;
+}
+
+int getPaletteIndexXY( in ivec2 fetch_pos )
+{
+	int palette_index = 0;
+	if( fetch_pos.x >= 0 && fetch_pos.y >= 0
+		&& fetch_pos.x < int( bitmap_size.x ) && fetch_pos.y < int( bitmap_size.y ) )
+	{
+		int uncompr_byte_index = fetch_pos.y * ( int( bitmap_size.x ) >> 3 )
+			+ ( fetch_pos.x >> 3);
+		int uncompr_byte = get_uncompr_byte( uncompr_byte_index );
+
+		int bit_index = fetch_pos.x & 0x07;
+		palette_index = ( uncompr_byte >> bit_index ) & 1;
+	}
+	return palette_index;
+}
+""")
+	else:
+		output_bitmap( bmp_data )
+		print("""
 int getPaletteIndexXY( in ivec2 fetch_pos )
 {
 	int palette_index = 0;
@@ -190,12 +212,12 @@ int getPaletteIndexXY( in ivec2 fetch_pos )
 }
 """)
 
-	outputFooter( bmp_data )
+	output_footer( bmp_data )
 
-def processFourBit( bmp_data ):
-	outputHeader( bmp_data )
-	outputPalette( bmp_data )
-	outputBitmap( bmp_data )
+def process_four_bit( bmp_data ):
+	output_header( bmp_data )
+	output_palette( bmp_data )
+	output_bitmap( bmp_data )
 
 	print("""
 int getPaletteIndexXY( in ivec2 fetch_pos )
@@ -216,12 +238,12 @@ int getPaletteIndexXY( in ivec2 fetch_pos )
 }
 """)
 
-	outputFooter( bmp_data )
+	output_footer( bmp_data )
 
-def processEightBit( bmp_data ):
-	outputHeader( bmp_data )
-	outputPalette( bmp_data )
-	outputBitmap( bmp_data )
+def process_eight_bit( bmp_data ):
+	output_header( bmp_data )
+	output_palette( bmp_data )
+	output_bitmap( bmp_data )
 
 	print("""
 int getPaletteIndexXY( in ivec2 fetch_pos )
@@ -242,20 +264,27 @@ int getPaletteIndexXY( in ivec2 fetch_pos )
 }
 """)
 
-	outputFooter( bmp_data )
+	output_footer( bmp_data )
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
 	parser.add_argument("filename", help="path to bmp file")
+	parser.add_argument("--rle", help="enable RLE encoding", action="store_true")
 	args = parser.parse_args()
 
-	bmp_data = loadBMP( args.filename )
+	bmp_data = bmpfile.load_bmp( args.filename )
+	if bmp_data.image_width % 32 != 0:
+		raise RuntimeError("Image width multiple of 32 expected")
 
 	if bmp_data.bits_per_pixel == 1:
-		processOneBit( bmp_data )
+		process_one_bit( bmp_data, args.rle )
 	elif bmp_data.bits_per_pixel == 4:
-		processFourBit( bmp_data )
+		if args.rle:
+			raise RuntimeError( "RLE currently not supported for this format" )
+		process_four_bit( bmp_data )
 	elif bmp_data.bits_per_pixel == 8:
-		processEightBit( bmp_data )
+		if args.rle:
+			raise RuntimeError( "RLE currently not supported for this format" )
+		process_eight_bit( bmp_data )
 	else:
 		raise RuntimeError( "Current bits per pixel not supported" )
