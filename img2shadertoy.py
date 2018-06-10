@@ -26,28 +26,37 @@ def output_palette( bmp_data ):
 		print("0x00{0:02x}{1:02x}{2:02x}".format(color[2], color[1], color[0]) + ("," if i != bmp_data.palette_size-1 else ""))
 	print(");")
 
-def output_bitmap( bmp_data ):
-	print("const int longs_per_line = {0};".format(bmp_data.row_size // 4))
-	print("const int[] bitmap = int[] (")
-	for i in range(bmp_data.image_height):
-		hexvals = []
-		for k in range(bmp_data.row_size // 4):
-			bitmapLong = bmp_data.row_data[i][k * 4 : (k+1) * 4]
-			if bmp_data.bits_per_pixel == 1:
-				# Reverse bits
-				bitStr = "{0:032b}".format(int.from_bytes(bitmapLong, byteorder='little'))
-				bitmapLong = int(bitStr[::-1], 2).to_bytes(4, byteorder='little')
-			elif bmp_data.bits_per_pixel == 4:
-				# Reverse nibbles
-				bitmapLong = int(bitmapLong.hex()[::-1], 16).to_bytes(4, byteorder='big')
-			elif bmp_data.bits_per_pixel == 8:
-				# Reverse endianness
-				bitmapLong = int.from_bytes(bitmapLong, byteorder='little').to_bytes(4, byteorder='big')
-			hexvals.append("0x" + bitmapLong.hex())
-		print(", ".join(hexvals) + ("," if i != bmp_data.image_height - 1 else ""))
-	print(");")
+def reverse_bitmap_order( bmp_data, reverse_type ):
+	"""
+	Reverse reverse_type ("bits"/"nibbles"/"endianness") so we save a subtraction in Shadertoy code to get the right pixel
+	"""
+	for i in range( bmp_data.image_height ):
+		new_row = []
+		for k in range( bmp_data.row_size // 4 ):
+			bitmap_long = bmp_data.row_data[ i ][ k * 4 : ( k + 1 ) * 4 ]
+			if reverse_type == "bits":
+				bitmap_long = bits.get_reverse_bits( bitmap_long )
+			elif reverse_type == "nibbles":
+				bitmap_long = bits.get_reverse_nibbles( bitmap_long )
+			elif reverse_type == "endianness":
+				bitmap_long = bits.get_reverse_endian( bitmap_long )
+			else:
+				raise RuntimeError( "Unknown reversal type %s" % reverse_type )
+			new_row.append( bitmap_long )
+		bmp_data.row_data[ i ] = bytes().join( new_row )
 
-def output_footer( bmp_data ):
+def output_bitmap( bmp_data ):
+	print( "const int longs_per_line = {0};".format( bmp_data.row_size // 4 ) )
+	print( "const int[] bitmap = int[] (" )
+	for i in range( bmp_data.image_height ):
+		hexvals = []
+		for k in range( bmp_data.row_size // 4 ):
+			bitmap_long = bmp_data.row_data[ i ][ k * 4 : ( k + 1 ) * 4 ]
+			hexvals.append( "0x" + bitmap_long.hex() )
+		print( ", ".join( hexvals ) + ( "," if i != bmp_data.image_height - 1 else "" ) )
+	print( ");" )
+
+def output_footer():
 	print("""
 int getPaletteIndex( in vec2 uv )
 {
@@ -78,56 +87,17 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
 }
 """)
 
-def sequences_to_bytes( seq ):
-	"""
-	Transforms result of rle.get_sequences() into a byte array.
-	Encoding:
-	- repeats start with a byte whose MSB is 1 and the lower bits are the count,
-	  followed by the value to repeat.
-	- sequences start with a byte whose MSB is 0 and the lower bits are the sequence length,
-	  followed by that number of bytes of the sequence.
-	"""
-	result = []
-	for s in seq:
-		if s[ 0 ] == "R":
-			count = s[ 1 ]
-			val = s[ 2 ]
-			while count != 0:
-				cur_reps = min( 128, count )
-				result.append( ( 0x80 | ( cur_reps - 1 ) ).to_bytes( 1, "little" ) )
-				result.append( bits.get_reverse_bits_byte( val.to_bytes( 1, "little" ) ) )
-				count -= cur_reps
-		else:
-			sequence = s[ 1 ]
-			seq_len = len( sequence )
-			seq_i = 0
-			while seq_len != 0:
-				cur_len = min( 128, seq_len )
-				result.append( ( cur_len - 1).to_bytes( 1, "little" ) )
-				for v in sequence[ seq_i : seq_i + cur_len ]:
-					result.append( bits.get_reverse_bits_byte( v.to_bytes( 1, "little" ) ) )
-				seq_i += cur_len
-				seq_len -= cur_len
-	return b''.join( result )
+def output_rle( encoded ):
+	print( "const int[] rle = int[] (" )
+	hexvals = []
+	for k in range( len( encoded ) // 4 ):
+		long_val = encoded[ k * 4 : ( k + 1 ) * 4 ]
+		long_val = bits.get_reverse_endian( long_val )
+		hexvals.append( "0x" + long_val.hex() )
+	print( ",\n".join( hexvals ) )
+	print( ");" )
 
-def process_one_bit( bmp_data, rle_enabled ):
-	output_header( bmp_data )
-	output_palette( bmp_data )
-
-	if rle_enabled:
-		bitmap = bytes().join( bmp_data.row_data )
-		seq = rle.get_sequences( rle.get_repeat_counts( bitmap ), 3 )
-		encoded = sequences_to_bytes( seq )
-
-		print( "const int[] rle = int[] (" )
-		hexvals = []
-		for k in range( len( encoded ) // 4 ):
-			long_val = encoded[ k * 4 : ( k + 1 ) * 4 ]
-			long_val = int.from_bytes( long_val, byteorder='little' ).to_bytes( 4, byteorder='big' )
-			hexvals.append( "0x" + long_val.hex() )
-		print( ",\n".join( hexvals ) )
-		print( ");" )
-		print("""
+	print("""
 const int rle_len_bytes = rle.length() << 2;
 
 int get_rle_byte( in int byte_index )
@@ -174,7 +144,58 @@ int get_uncompr_byte( in int byte_index )
 
 	return 0;
 }
+""")
 
+def sequences_to_bytes( seq, value_op = None ):
+	"""
+	Transforms result of rle.get_sequences() into a byte array.
+	Encoding:
+	- repeats start with a byte whose MSB is 1 and the lower bits are the count,
+	  followed by the value to repeat.
+	- sequences start with a byte whose MSB is 0 and the lower bits are the sequence length,
+	  followed by that number of bytes of the sequence.
+	"""
+	result = []
+	for s in seq:
+		if s[ 0 ] == "R":
+			count = s[ 1 ]
+			val = s[ 2 ]
+			while count != 0:
+				cur_reps = min( 128, count )
+				result.append( ( 0x80 | ( cur_reps - 1 ) ).to_bytes( 1, "little" ) )
+				store_val = val.to_bytes( 1, "little" )
+				if value_op:
+					store_val = value_op( store_val )
+				result.append( store_val )
+				count -= cur_reps
+		else:
+			sequence = s[ 1 ]
+			seq_len = len( sequence )
+			seq_i = 0
+			while seq_len != 0:
+				cur_len = min( 128, seq_len )
+				result.append( ( cur_len - 1).to_bytes( 1, "little" ) )
+				for v in sequence[ seq_i : seq_i + cur_len ]:
+					store_val = v.to_bytes( 1, "little" )
+					if value_op:
+						store_val = value_op( store_val )
+					result.append( store_val )
+				seq_i += cur_len
+				seq_len -= cur_len
+	return b''.join( result )
+
+def process_one_bit( bmp_data, rle_enabled ):
+	output_header( bmp_data )
+	output_palette( bmp_data )
+
+	if rle_enabled:
+		bitmap = bytes().join( bmp_data.row_data )
+		seq = rle.get_sequences( rle.get_repeat_counts( bitmap ), 3 )
+		encoded = sequences_to_bytes( seq, bits.get_reverse_bits )
+
+		output_rle( encoded )
+
+		print("""
 int getPaletteIndexXY( in ivec2 fetch_pos )
 {
 	int palette_index = 0;
@@ -192,6 +213,7 @@ int getPaletteIndexXY( in ivec2 fetch_pos )
 }
 """)
 	else:
+		reverse_bitmap_order( bmp_data, "bits" )
 		output_bitmap( bmp_data )
 		print("""
 int getPaletteIndexXY( in ivec2 fetch_pos )
@@ -212,14 +234,42 @@ int getPaletteIndexXY( in ivec2 fetch_pos )
 }
 """)
 
-	output_footer( bmp_data )
+	output_footer()
 
-def process_four_bit( bmp_data ):
+def process_four_bit( bmp_data, rle_enabled ):
 	output_header( bmp_data )
 	output_palette( bmp_data )
-	output_bitmap( bmp_data )
 
-	print("""
+	if rle_enabled:
+		bitmap = bytes().join( bmp_data.row_data )
+		seq = rle.get_sequences( rle.get_repeat_counts( bitmap ), 3 )
+		encoded = sequences_to_bytes( seq, bits.get_reverse_nibbles )
+
+		output_rle( encoded )
+
+		print("""
+int getPaletteIndexXY( in ivec2 fetch_pos )
+{
+	int palette_index = 0;
+	if( fetch_pos.x >= 0 && fetch_pos.y >= 0
+		&& fetch_pos.x < int( bitmap_size.x ) && fetch_pos.y < int( bitmap_size.y ) )
+	{
+		int uncompr_byte_index = fetch_pos.y * ( int( bitmap_size.x ) >> 1 )
+			+ ( fetch_pos.x >> 1);
+
+		int uncompr_byte = get_uncompr_byte( uncompr_byte_index );
+
+		int nibble_index = fetch_pos.x & 0x01;
+		palette_index = ( uncompr_byte >> ( nibble_index << 2 ) ) & 0xf;
+	}
+	return palette_index;
+}
+""")
+	else:
+		reverse_bitmap_order( bmp_data, "nibbles" )
+		output_bitmap( bmp_data )
+
+		print("""
 int getPaletteIndexXY( in ivec2 fetch_pos )
 {
 	int palette_index = 0;
@@ -238,11 +288,13 @@ int getPaletteIndexXY( in ivec2 fetch_pos )
 }
 """)
 
-	output_footer( bmp_data )
+	output_footer()
 
 def process_eight_bit( bmp_data ):
 	output_header( bmp_data )
 	output_palette( bmp_data )
+
+	reverse_bitmap_order( bmp_data, "endianness" )
 	output_bitmap( bmp_data )
 
 	print("""
@@ -264,7 +316,7 @@ int getPaletteIndexXY( in ivec2 fetch_pos )
 }
 """)
 
-	output_footer( bmp_data )
+	output_footer()
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
@@ -279,9 +331,7 @@ if __name__ == '__main__':
 	if bmp_data.bits_per_pixel == 1:
 		process_one_bit( bmp_data, args.rle )
 	elif bmp_data.bits_per_pixel == 4:
-		if args.rle:
-			raise RuntimeError( "RLE currently not supported for this format" )
-		process_four_bit( bmp_data )
+		process_four_bit( bmp_data, args.rle )
 	elif bmp_data.bits_per_pixel == 8:
 		if args.rle:
 			raise RuntimeError( "RLE currently not supported for this format" )
