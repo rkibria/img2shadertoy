@@ -6,6 +6,7 @@ Convert image into Shadertoy script that displays it
   * 4 bit image: https://www.shadertoy.com/view/4sGBzm
     * with RLE: https://www.shadertoy.com/view/XsKBDh
   * 8 bit image: https://www.shadertoy.com/view/4dyBzm
+    * with 1-dim. DCT: https://www.shadertoy.com/view/ldyBRc
 * Windows .bmp format files supported as input
 * Redirect output to text file for result
 * Image width must be multiple of 32

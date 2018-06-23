@@ -10,6 +10,7 @@ import os, sys, argparse, logging
 import bmpfile
 import rle
 import bits
+import dct
 
 logging.basicConfig( format='-- %(message)s' )
 logger = logging.getLogger( 'img2shadertoy' )
@@ -290,14 +291,87 @@ int getPaletteIndexXY( in ivec2 fetch_pos )
 
 	output_footer()
 
-def process_eight_bit( bmp_data ):
-	output_header( bmp_data )
-	output_palette( bmp_data )
+def process_eight_bit( bmp_data, use_dct ):
+	if use_dct:
+		output_header( bmp_data )
 
-	reverse_bitmap_order( bmp_data, "endianness" )
-	output_bitmap( bmp_data )
+		dct_input_block_size = 8
+		dct_output_block_size = 3
 
-	print("""
+		print( "const float[] dct = float[] (" )
+		n_lines = len( bmp_data.row_data )
+		for y in range( n_lines ):
+			row = bmp_data.row_data[ y ]
+			n_blocks = len( row ) // dct_input_block_size
+			for j in range( n_blocks ):
+				block_bytes = row[ ( j * dct_input_block_size ) : ( ( j + 1 ) * dct_input_block_size ) ]
+				color_vals = [ ( sum( bmp_data.palette[ i ] ) / 3.0 ) for i in block_bytes ]
+				shifted_colors = [ ( i - 128 ) for i in color_vals ]
+				dct_block = dct.get_dct( shifted_colors )
+
+				out_dct_block = dct_block[ : dct_output_block_size ]
+				print( ", ".join( map( str, out_dct_block ) )
+					+ ( "" if ( y == ( n_lines - 1 ) and ( j == n_blocks - 1 ) ) else "," ) )
+			print( "" )
+		print( ");" )
+
+		print( "#define PI 3.141592653589793" )
+		print( "const int pixels_per_dct_block = {0};".format( dct_input_block_size ) )
+		print( "const int dct_block_size = {0};".format( dct_output_block_size ) )
+		print( "const int dct_blocks_per_line = {0};".format( bmp_data.image_width // dct_input_block_size ) )
+
+		print( """
+float get_dct_val( in int start, in int index )
+{
+	return ( index < dct_block_size ) ? dct[ start + index ] : 0. ;
+}
+
+float get_idct( in int start, in int index )
+{
+	float NN = float( pixels_per_dct_block );
+
+	float r = get_dct_val( start, 0 ) / sqrt( 2. );
+
+	for( int n = 1; n < pixels_per_dct_block; ++n )
+	{
+		r += get_dct_val( start, n )
+			* cos( PI / NN * float( n ) * ( float( index ) + 0.5 ) );
+	}
+
+	r *= sqrt( 2. / NN );
+	return r;
+}
+
+vec4 getBitmapColor( in vec2 uv )
+{
+	vec4 col = vec4(0);
+	ivec2 fetch_pos = ivec2( uv * bitmap_size );
+	if( fetch_pos.x >= 0 && fetch_pos.y >= 0
+		&& fetch_pos.x < int( bitmap_size.x ) && fetch_pos.y < int( bitmap_size.y ) )
+	{
+		int dct_block_index = fetch_pos.y * dct_blocks_per_line * dct_block_size
+			+ ( fetch_pos.x / ( pixels_per_dct_block ) ) * dct_block_size;
+		int pixel_index = fetch_pos.x % pixels_per_dct_block;
+		float idct = get_idct( dct_block_index, pixel_index );
+		col = vec4( ( idct + 128.) / 255. );
+	}
+	return col;
+}
+
+void mainImage( out vec4 fragColor, in vec2 fragCoord )
+{
+	vec2 uv = fragCoord / iResolution.y;
+	fragColor = getBitmapColor( uv );
+}
+""" )
+	else:
+		output_header( bmp_data )
+		output_palette( bmp_data )
+
+		reverse_bitmap_order( bmp_data, "endianness" )
+		output_bitmap( bmp_data )
+
+		print("""
 int getPaletteIndexXY( in ivec2 fetch_pos )
 {
 	int palette_index = 0;
@@ -316,12 +390,14 @@ int getPaletteIndexXY( in ivec2 fetch_pos )
 }
 """)
 
-	output_footer()
+		output_footer()
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
 	parser.add_argument("filename", help="path to bmp file")
 	parser.add_argument("--rle", help="enable RLE encoding", action="store_true")
+	parser.add_argument("--dct", help="enable DCT encoding", action="store_true")
+	parser.add_argument("--bw", help="convert to black & white (avoids storing palette)", action="store_true")
 	args = parser.parse_args()
 
 	bmp_data = bmpfile.load_bmp( args.filename )
@@ -335,6 +411,6 @@ if __name__ == '__main__':
 	elif bmp_data.bits_per_pixel == 8:
 		if args.rle:
 			raise RuntimeError( "RLE currently not supported for this format" )
-		process_eight_bit( bmp_data )
+		process_eight_bit( bmp_data, args.dct )
 	else:
 		raise RuntimeError( "Current bits per pixel not supported" )
