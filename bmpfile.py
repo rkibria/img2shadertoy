@@ -76,6 +76,8 @@ def load_bmp( filepath ):
 
 	palette_size = int.from_bytes(data[46:50], byteorder='little')
 	logger.info("Palette size {0}".format(palette_size))
+	if palette_size == 0:
+		raise RuntimeError("Palette size 0 detected: possibly due to MS Paint saving in modified format, please try a different program to generate BMP")
 
 	palette = [None] * palette_size
 	for i in range(palette_size):
