@@ -18,6 +18,7 @@ logger.setLevel( logging.DEBUG )
 
 
 def output_header( bmp_data ):
+	print("// Generated with https://github.com/rkibria/img2shadertoy")
 	print("const vec2 bitmap_size = vec2({0}, {1});".format(bmp_data.image_width, bmp_data.image_height))
 
 def output_palette( bmp_data ):
@@ -293,52 +294,88 @@ int getPaletteIndexXY( in ivec2 fetch_pos )
 
 def process_eight_bit( bmp_data, use_dct ):
 	if use_dct:
-		output_header( bmp_data )
-
 		dct_input_block_size = 8
 		dct_output_block_size = 3
 
-		print( "const float[] dct = float[] (" )
-		n_lines = len( bmp_data.row_data )
-		for y in range( n_lines ):
-			row = bmp_data.row_data[ y ]
-			n_blocks = len( row ) // dct_input_block_size
-			for j in range( n_blocks ):
-				block_bytes = row[ ( j * dct_input_block_size ) : ( ( j + 1 ) * dct_input_block_size ) ]
-				color_vals = [ ( sum( bmp_data.palette[ i ] ) / 3.0 ) for i in block_bytes ]
-				shifted_colors = [ ( i - 128 ) for i in color_vals ]
-				dct_block = dct.get_dct( shifted_colors )
+		if bmp_data.image_height % dct_input_block_size != 0:
+			raise RuntimeError( "Image height multiple of %d expected" % dct_input_block_size )
 
-				out_dct_block = dct_block[ : dct_output_block_size ]
-				print( ", ".join( map( str, out_dct_block ) )
-					+ ( "" if ( y == ( n_lines - 1 ) and ( j == n_blocks - 1 ) ) else "," ) )
-			print( "" )
-		print( ");" )
+		output_header( bmp_data )
+
+		dct_columns = bmp_data.image_width // dct_input_block_size
+		dct_rows = bmp_data.image_height // dct_input_block_size
 
 		print( "#define PI 3.141592653589793" )
 		print( "const int pixels_per_dct_block = {0};".format( dct_input_block_size ) )
 		print( "const int dct_block_size = {0};".format( dct_output_block_size ) )
-		print( "const int dct_blocks_per_line = {0};".format( bmp_data.image_width // dct_input_block_size ) )
+		print( "const int dct_columns = {0};".format( dct_columns ) )
+		print( "const int dct_rows = {0};".format( dct_rows ) )
+
+		dct_compressed_data = []
+		for y in range( dct_rows ):
+			dct_compressed_row = []
+			row_bytes = bmp_data.row_data[ y * dct_input_block_size : ( y + 1 ) * dct_input_block_size ]
+			for x in range( dct_columns ):
+				dct_block_bytes = []
+				for i in range( dct_input_block_size ):
+					dct_block_bytes.append( row_bytes[ i ][ x * dct_input_block_size : ( x + 1 ) * dct_input_block_size ] )
+
+				shifted_colors = []
+				for block_bytes in dct_block_bytes:
+					color_vals = [ ( sum( bmp_data.palette[ i ] ) / 3.0 ) for i in block_bytes ]
+					shifted_colors.append( [ ( i - 128 ) for i in color_vals ] )
+
+				dct_block = dct.get_2d_dct( shifted_colors )
+
+				compressed_dct_block = []
+				for i in range( dct_output_block_size ):
+					compressed_dct_block.append( dct_block[ i ][ : dct_output_block_size ] )
+
+				dct_compressed_row.append( compressed_dct_block )
+			dct_compressed_data.append( dct_compressed_row )
+
+		print( "const float[] dct = float[] (" )
+		for y in range( dct_rows ):
+			for x in range( dct_columns ):
+				dct_block = dct_compressed_data[ y ][ x ]
+				for row_index in range( dct_output_block_size ):
+					print( ", ".join( map( str, dct_block[ row_index ] ) )
+							+ ( "" if ( y == ( dct_rows - 1 ) and ( x == dct_columns - 1 ) and ( row_index == dct_output_block_size - 1 ) ) else "," )
+							)
+				print()
+			print()
+		print( ");" )
 
 		print( """
-float get_dct_val( in int start, in int index )
+float get_dct_val( in int start, in int x, in int y )
 {
-	return ( index < dct_block_size ) ? dct[ start + index ] : 0. ;
+	return ( x < dct_block_size && y < dct_block_size ) ? dct[ start + y * dct_block_size + x ] : 0. ;
 }
 
-float get_idct( in int start, in int index )
+float c_factor( in int i )
+{
+	return ( i == 0 ) ?  ( 1.0 / sqrt( 2.0 ) ) : 1.0;
+}
+
+float cos_term( in int inner, in int outer )
+{
+	return cos( PI * float( inner ) * ( 2.0 * float( outer ) + 1.0 ) / ( 2.0 * float( pixels_per_dct_block ) ) );
+}
+
+float get_idct( in int start, in int i, in int j )
 {
 	float NN = float( pixels_per_dct_block );
+	float r = 0.;
 
-	float r = get_dct_val( start, 0 ) / sqrt( 2. );
-
-	for( int n = 1; n < pixels_per_dct_block; ++n )
+	for( int x = 0; x < pixels_per_dct_block; ++x )
 	{
-		r += get_dct_val( start, n )
-			* cos( PI / NN * float( n ) * ( float( index ) + 0.5 ) );
+		for( int y = 0; y < pixels_per_dct_block; ++y )
+		{
+			r += c_factor( x ) * c_factor( y ) * get_dct_val( start, x, y ) * cos_term( x, i ) * cos_term( y, j );
+		}
 	}
 
-	r *= sqrt( 2. / NN );
+	r *= 2. / NN;
 	return r;
 }
 
@@ -349,10 +386,14 @@ vec4 getBitmapColor( in vec2 uv )
 	if( fetch_pos.x >= 0 && fetch_pos.y >= 0
 		&& fetch_pos.x < int( bitmap_size.x ) && fetch_pos.y < int( bitmap_size.y ) )
 	{
-		int dct_block_index = fetch_pos.y * dct_blocks_per_line * dct_block_size
-			+ ( fetch_pos.x / ( pixels_per_dct_block ) ) * dct_block_size;
-		int pixel_index = fetch_pos.x % pixels_per_dct_block;
-		float idct = get_idct( dct_block_index, pixel_index );
+		int dct_row = fetch_pos.y / pixels_per_dct_block;
+		int dct_col = fetch_pos.x / pixels_per_dct_block;
+		const int values_per_dct_block = dct_block_size * dct_block_size;
+		int dct_values_per_row = values_per_dct_block * dct_columns;
+		int dct_block_index = dct_row * dct_values_per_row + dct_col * values_per_dct_block;
+		int pixel_x = fetch_pos.x % pixels_per_dct_block;
+		int pixel_y = fetch_pos.y % pixels_per_dct_block;
+		float idct = get_idct( dct_block_index, pixel_x, pixel_y );
 		col = vec4( ( idct + 128.) / 255. );
 	}
 	return col;
@@ -396,13 +437,13 @@ if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
 	parser.add_argument("filename", help="path to bmp file")
 	parser.add_argument("--rle", help="enable RLE encoding", action="store_true")
-	parser.add_argument("--dct", help="enable DCT encoding", action="store_true")
-	parser.add_argument("--bw", help="convert to black & white (avoids storing palette)", action="store_true")
+	parser.add_argument("--dct", help="enable DCT encoding (8 bit only, converts to grayscale)", action="store_true")
+	# parser.add_argument("--bw", help="convert to black & white (avoids storing palette)", action="store_true")
 	args = parser.parse_args()
 
 	bmp_data = bmpfile.load_bmp( args.filename )
 	if bmp_data.image_width % 32 != 0:
-		raise RuntimeError("Image width multiple of 32 expected")
+		raise RuntimeError( "Image width multiple of 32 expected" )
 
 	if bmp_data.bits_per_pixel == 1:
 		process_one_bit( bmp_data, args.rle )
