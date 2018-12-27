@@ -20,11 +20,17 @@ logger.setLevel(logging.DEBUG)
 
 
 def output_header(bmp_data):
+    """
+    Shadertoy output: top of script
+    """
     print("// Generated with https://github.com/rkibria/img2shadertoy")
     print("const vec2 bitmap_size = vec2({0}, {1});".format(bmp_data.image_width,
                                                             bmp_data.image_height))
 
 def output_palette(bmp_data):
+    """
+    Shadertoy output: palette entries
+    """
     print("const int[] palette = int[] (")
     for i in range(bmp_data.palette_size):
         color = bmp_data.palette[i]
@@ -53,6 +59,9 @@ def reverse_bitmap_order(bmp_data, reverse_type):
         bmp_data.row_data[i] = bytes().join(new_row)
 
 def output_bitmap(bmp_data):
+    """
+    Shadertoy output: bitmap
+    """
     print("const int longs_per_line = {0};".format(bmp_data.row_size // 4))
     print("const int[] bitmap = int[] (")
     for i in range(bmp_data.image_height):
@@ -64,6 +73,9 @@ def output_bitmap(bmp_data):
     print(");")
 
 def output_footer():
+    """
+    Shadertoy output: bottom of script
+    """
     print("""
 int getPaletteIndex(in vec2 uv)
 {
@@ -95,6 +107,9 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
 """)
 
 def output_rle(encoded):
+    """
+    Shadertoy output: RLE output
+    """
     print("const int[] rle = int[] (")
     hexvals = []
     for k in range(len(encoded)// 4):
@@ -192,6 +207,9 @@ def sequences_to_bytes(seq, value_op=None):
     return b''.join(result)
 
 def process_one_bit(bmp_data, rle_enabled):
+    """
+    Process 1bpp image
+    """
     output_header(bmp_data)
     output_palette(bmp_data)
 
@@ -244,6 +262,9 @@ int getPaletteIndexXY(in ivec2 fetch_pos)
     output_footer()
 
 def process_four_bit(bmp_data, rle_enabled):
+    """
+    Process 4bpp image
+    """
     output_header(bmp_data)
     output_palette(bmp_data)
 
@@ -306,6 +327,9 @@ QUANT_MTX = [
     ]
 
 def get_quantized_dct_block(dct_output_block_size, compressed_dct_block):
+    """
+    Apply quantization matrix
+    """
     quantized_block = []
     for y in range(dct_output_block_size):
         quantized_row = []
@@ -318,6 +342,9 @@ def get_quantized_dct_block(dct_output_block_size, compressed_dct_block):
     return quantized_block
 
 def get_quantized_ints_block(dct_output_block_size, quantized_block):
+    """
+    Shadertoy output: quantized blocks
+    """
     ints_block = []
     for y in range(dct_output_block_size):
         current_int = 0
@@ -334,6 +361,9 @@ def get_quantized_ints_block(dct_output_block_size, quantized_block):
     return ints_block
 
 def process_eight_bit(bmp_data, use_dct):
+    """
+    Process 8bpp image
+    """
     if use_dct:
         dct_input_block_size = 8
         dct_output_block_size = 4
