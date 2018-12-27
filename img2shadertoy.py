@@ -292,10 +292,46 @@ int getPaletteIndexXY( in ivec2 fetch_pos )
 
 	output_footer()
 
+# https://en.wikipedia.org/wiki/JPEG#Quantization
+QUANT_MTX = [
+	[ 16, 11, 10, 16, ],
+	[ 12, 12, 14, 19, ],
+	[ 14, 13, 16, 24, ],
+	[ 14, 17, 22, 29, ],
+	]
+
+def get_quantized_dct_block( dct_output_block_size, compressed_dct_block ):
+	quantized_block = []
+	for y in range( dct_output_block_size ):
+		quantized_row = []
+		for x in range( dct_output_block_size ):
+			unquantized = compressed_dct_block[ y ][ x ]
+			quant_factor = QUANT_MTX[ y ][ x ]
+			quantized = int( round( unquantized / quant_factor ) )
+			quantized_row.append( quantized )
+		quantized_block.append( quantized_row )
+	return quantized_block
+
+def get_quantized_ints_block( dct_output_block_size, quantized_block ):
+	ints_block = []
+	for y in range( dct_output_block_size ):
+		current_int = 0
+		for x in range( dct_output_block_size ):
+			quantized = quantized_block[ y ][ x ]
+			print( quantized )
+			contrib = ( quantized << ( x * 8 ) ) & ( 0xff << ( x * 8 ) )
+			print( contrib )
+			current_int |= contrib
+			print("")
+		print("---")
+		print( current_int.to_bytes( 4, byteorder='big' ) )
+		ints_block.append( current_int )
+	return ints_block
+
 def process_eight_bit( bmp_data, use_dct ):
 	if use_dct:
 		dct_input_block_size = 8
-		dct_output_block_size = 3
+		dct_output_block_size = 4
 
 		if bmp_data.image_height % dct_input_block_size != 0:
 			raise RuntimeError( "Image height multiple of %d expected" % dct_input_block_size )
@@ -338,13 +374,19 @@ def process_eight_bit( bmp_data, use_dct ):
 		for y in range( dct_rows ):
 			for x in range( dct_columns ):
 				dct_block = dct_compressed_data[ y ][ x ]
-				for row_index in range( dct_output_block_size ):
-					print( ", ".join( map( str, dct_block[ row_index ] ) )
-							+ ( "" if ( y == ( dct_rows - 1 ) and ( x == dct_columns - 1 ) and ( row_index == dct_output_block_size - 1 ) ) else "," )
-							)
+				print( dct_block )
+				quantized_block = get_quantized_dct_block( dct_output_block_size, dct_block )
+				print( quantized_block )
+				ints_block = get_quantized_ints_block( dct_output_block_size, quantized_block )
+				print( ints_block )
+				# for row_index in range( dct_output_block_size ):
+					# print( ", ".join( map( str, dct_block[ row_index ] ) )
+							# + ( "" if ( y == ( dct_rows - 1 ) and ( x == dct_columns - 1 ) and ( row_index == dct_output_block_size - 1 ) ) else "," )
+							# )
 				print()
 			print()
 		print( ");" )
+		sys.exit(0)
 
 		print( """
 float get_dct_val( in int start, in int x, in int y )
