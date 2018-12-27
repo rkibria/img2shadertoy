@@ -15,8 +15,8 @@ import bits
 import dct
 
 logging.basicConfig(format='-- %(message)s')
-logger = logging.getLogger('img2shadertoy')
-logger.setLevel(logging.DEBUG)
+LOGGER = logging.getLogger('img2shadertoy')
+LOGGER.setLevel(logging.DEBUG)
 
 
 def output_header(bmp_data):
