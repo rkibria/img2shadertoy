@@ -168,9 +168,9 @@ int get_uncompr_byte(in int byte_index)
 }
 """)
 
-def sequences_to_bytes(seq, value_op=None):
+def sequences_to_bytes(sequence, value_op=None):
     """
-    Transforms result of rle.get_sequences()into a byte array.
+    Transforms result of rle.get_sequences() into a byte array.
     Encoding:
     - repeats start with a byte whose MSB is 1 and the lower bits are the count,
       followed by the value to repeat.
@@ -178,10 +178,10 @@ def sequences_to_bytes(seq, value_op=None):
       followed by that number of bytes of the sequence.
     """
     result = []
-    for s in seq:
-        if s[0] == "R":
-            count = s[1]
-            val = s[2]
+    for seq in sequence:
+        if seq[0] == "R":
+            count = seq[1]
+            val = seq[2]
             while count != 0:
                 cur_reps = min(128, count)
                 result.append((0x80 | (cur_reps - 1)).to_bytes(1, "little"))
@@ -191,14 +191,14 @@ def sequences_to_bytes(seq, value_op=None):
                 result.append(store_val)
                 count -= cur_reps
         else:
-            sequence = s[1]
-            seq_len = len(sequence)
+            part_sequence = seq[1]
+            seq_len = len(part_sequence)
             seq_i = 0
             while seq_len != 0:
                 cur_len = min(128, seq_len)
                 result.append((cur_len - 1).to_bytes(1, "little"))
-                for v in sequence[seq_i : seq_i + cur_len]:
-                    store_val = v.to_bytes(1, "little")
+                for seq_val in part_sequence[seq_i : seq_i + cur_len]:
+                    store_val = seq_val.to_bytes(1, "little")
                     if value_op:
                         store_val = value_op(store_val)
                     result.append(store_val)
@@ -331,11 +331,11 @@ def get_quantized_dct_block(dct_output_block_size, compressed_dct_block):
     Apply quantization matrix
     """
     quantized_block = []
-    for y in range(dct_output_block_size):
+    for y_index in range(dct_output_block_size):
         quantized_row = []
-        for x in range(dct_output_block_size):
-            unquantized = compressed_dct_block[y][x]
-            quant_factor = QUANT_MTX[y][x]
+        for x_index in range(dct_output_block_size):
+            unquantized = compressed_dct_block[y_index][x_index]
+            quant_factor = QUANT_MTX[y_index][x_index]
             quantized = int(round(unquantized / quant_factor))
             quantized_row.append(quantized)
         quantized_block.append(quantized_row)
@@ -346,12 +346,12 @@ def get_quantized_ints_block(dct_output_block_size, quantized_block):
     Shadertoy output: quantized blocks
     """
     ints_block = []
-    for y in range(dct_output_block_size):
+    for y_index in range(dct_output_block_size):
         current_int = 0
-        for x in range(dct_output_block_size):
-            quantized = quantized_block[y][x]
+        for x_index in range(dct_output_block_size):
+            quantized = quantized_block[y_index][x_index]
             print(quantized)
-            contrib = (quantized << (x * 8))& (0xff << (x * 8))
+            contrib = (quantized << (x_index * 8))& (0xff << (x_index * 8))
             print(contrib)
             current_int |= contrib
             print("")
@@ -383,15 +383,15 @@ def process_eight_bit(bmp_data, use_dct):
         print("const int dct_rows = {0};".format(dct_rows))
 
         dct_compressed_data = []
-        for y in range(dct_rows):
+        for y_index in range(dct_rows):
             dct_compressed_row = []
-            row_bytes = bmp_data.row_data[y * dct_input_block_size
-                                          : (y + 1) * dct_input_block_size]
-            for x in range(dct_columns):
+            row_bytes = bmp_data.row_data[y_index * dct_input_block_size
+                                          : (y_index + 1) * dct_input_block_size]
+            for x_index in range(dct_columns):
                 dct_block_bytes = []
                 for i in range(dct_input_block_size):
-                    dct_block_bytes.append(row_bytes[i][x * dct_input_block_size
-                                                        : (x + 1)* dct_input_block_size])
+                    dct_block_bytes.append(row_bytes[i][x_index * dct_input_block_size
+                                                        : (x_index + 1)* dct_input_block_size])
 
                 shifted_colors = []
                 for block_bytes in dct_block_bytes:
@@ -408,9 +408,9 @@ def process_eight_bit(bmp_data, use_dct):
             dct_compressed_data.append(dct_compressed_row)
 
         print("const float[] dct = float[] (")
-        for y in range(dct_rows):
-            for x in range(dct_columns):
-                dct_block = dct_compressed_data[y][x]
+        for y_index in range(dct_rows):
+            for x_index in range(dct_columns):
+                dct_block = dct_compressed_data[y_index][x_index]
                 print(dct_block)
                 quantized_block = get_quantized_dct_block(dct_output_block_size, dct_block)
                 print(quantized_block)
@@ -418,7 +418,7 @@ def process_eight_bit(bmp_data, use_dct):
                 print(ints_block)
                 # for row_index in range(dct_output_block_size):
                     # print(", ".join(map(str, dct_block[row_index]))
-                            # + ("" if (y == (dct_rows - 1)and (x == dct_columns - 1)and (row_index == dct_output_block_size - 1))else ",")
+                            # + ("" if (y_index == (dct_rows - 1)and (x_index == dct_columns - 1)and (row_index == dct_output_block_size - 1))else ",")
                             #)
                 print()
             print()
