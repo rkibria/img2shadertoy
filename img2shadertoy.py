@@ -5,7 +5,6 @@
 Convert image to a Shadertoy script
 """
 
-import sys
 import argparse
 import logging
 
@@ -350,13 +349,9 @@ def get_quantized_ints_block(dct_output_block_size, quantized_block):
         current_int = 0
         for x_index in range(dct_output_block_size):
             quantized = quantized_block[y_index][x_index]
-            print(quantized)
             contrib = (quantized << (x_index * 8))& (0xff << (x_index * 8))
-            print(contrib)
             current_int |= contrib
-            print("")
-        print("---")
-        print(current_int.to_bytes(4, byteorder='big'))
+        # print(current_int.to_bytes(4, byteorder='big'))
         ints_block.append(current_int)
     return ints_block
 
@@ -407,23 +402,17 @@ def process_eight_bit(bmp_data, use_dct):
                 dct_compressed_row.append(compressed_dct_block)
             dct_compressed_data.append(dct_compressed_row)
 
-        print("const float[] dct = float[] (")
+        print("\nconst int[] dct = int[] (")
         for y_index in range(dct_rows):
             for x_index in range(dct_columns):
                 dct_block = dct_compressed_data[y_index][x_index]
-                print(dct_block)
                 quantized_block = get_quantized_dct_block(dct_output_block_size, dct_block)
-                print(quantized_block)
                 ints_block = get_quantized_ints_block(dct_output_block_size, quantized_block)
-                print(ints_block)
-                # for row_index in range(dct_output_block_size):
-                    # print(", ".join(map(str, dct_block[row_index]))
-                            # + ("" if (y_index == (dct_rows - 1)and (x_index == dct_columns - 1)and (row_index == dct_output_block_size - 1))else ",")
-                            #)
-                print()
+                print(", ".join(map(str, ints_block))
+                      + ("" if (y_index == (dct_rows - 1) and (x_index == dct_columns - 1))
+                         else ","))
             print()
         print(");")
-        sys.exit(0)
 
         print("""
 float get_dct_val(in int start, in int x, in int y)
