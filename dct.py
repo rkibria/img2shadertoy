@@ -101,9 +101,15 @@ def get_2d_idct(input_matrix):
     return result
 
 class TestDCT(unittest.TestCase):
+    """
+    Test class for DCT functions
+    """
     def test_1d(self):
+        """
+        1-dimensional DCT tests
+        """
         random.seed()
-        for iteration in range(10):
+        for _iteration in range(10):
             for list_len in range(100):
                 x = list(map(lambda x: random.uniform(-10000, 10000), [0.0] * list_len))
                 dct_x = get_dct(x)
@@ -112,8 +118,11 @@ class TestDCT(unittest.TestCase):
                     self.assertAlmostEqual(x[i], idct_x[i])
 
     def test_2d(self):
+        """
+        2-dimensional DCT tests
+        """
         random.seed()
-        for iteration in range(10):
+        for _iteration in range(10):
             for list_len in range(2, 16):
                 x = []
                 for i in range(list_len):
