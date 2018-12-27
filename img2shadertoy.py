@@ -35,7 +35,7 @@ def reverse_bitmap_order(bmp_data, reverse_type):
 	for i in range(bmp_data.image_height):
 		new_row = []
 		for k in range(bmp_data.row_size // 4):
-			bitmap_long = bmp_data.row_data[ i ][ k * 4 : (k + 1)* 4 ]
+			bitmap_long = bmp_data.row_data[i][k * 4 : (k + 1)* 4]
 			if reverse_type == "bits":
 				bitmap_long = bits.get_reverse_bits(bitmap_long)
 			elif reverse_type == "nibbles":
@@ -45,7 +45,7 @@ def reverse_bitmap_order(bmp_data, reverse_type):
 			else:
 				raise RuntimeError("Unknown reversal type %s" % reverse_type)
 			new_row.append(bitmap_long)
-		bmp_data.row_data[ i ] = bytes().join(new_row)
+		bmp_data.row_data[i] = bytes().join(new_row)
 
 def output_bitmap(bmp_data):
 	print("const int longs_per_line = {0};".format(bmp_data.row_size // 4))
@@ -53,7 +53,7 @@ def output_bitmap(bmp_data):
 	for i in range(bmp_data.image_height):
 		hexvals = []
 		for k in range(bmp_data.row_size // 4):
-			bitmap_long = bmp_data.row_data[ i ][ k * 4 : (k + 1)* 4 ]
+			bitmap_long = bmp_data.row_data[i][k * 4 : (k + 1)* 4]
 			hexvals.append("0x" + bitmap_long.hex())
 		print(", ".join(hexvals)+ ("," if i != bmp_data.image_height - 1 else ""))
 	print(");")
@@ -70,7 +70,7 @@ int getPaletteIndex(in vec2 uv)
 
 vec4 getColorFromPalette(in int palette_index)
 {
-	int int_color = palette[ palette_index ];
+	int int_color = palette[palette_index];
 	return vec4(float(int_color & 0xff)/ 255.0,
 				float((int_color >> 8)& 0xff)/ 255.0,
 				float((int_color >> 16)& 0xff)/ 255.0,
@@ -93,7 +93,7 @@ def output_rle(encoded):
 	print("const int[] rle = int[] (")
 	hexvals = []
 	for k in range(len(encoded)// 4):
-		long_val = encoded[ k * 4 : (k + 1)* 4 ]
+		long_val = encoded[k * 4 : (k + 1)* 4]
 		long_val = bits.get_reverse_endian(long_val)
 		hexvals.append("0x" + long_val.hex())
 	print(",\n".join(hexvals))
@@ -104,7 +104,7 @@ const int rle_len_bytes = rle.length()<< 2;
 
 int get_rle_byte(in int byte_index)
 {
-	int long_val = rle[ byte_index >> 2 ];
+	int long_val = rle[byte_index >> 2];
 	return (long_val >> ((byte_index & 0x03)<< 3))& 0xff;
 }
 
@@ -159,9 +159,9 @@ def sequences_to_bytes(seq, value_op = None):
 	"""
 	result = []
 	for s in seq:
-		if s[ 0 ] == "R":
-			count = s[ 1 ]
-			val = s[ 2 ]
+		if s[0] == "R":
+			count = s[1]
+			val = s[2]
 			while count != 0:
 				cur_reps = min(128, count)
 				result.append((0x80 | (cur_reps - 1)).to_bytes(1, "little"))
@@ -171,13 +171,13 @@ def sequences_to_bytes(seq, value_op = None):
 				result.append(store_val)
 				count -= cur_reps
 		else:
-			sequence = s[ 1 ]
+			sequence = s[1]
 			seq_len = len(sequence)
 			seq_i = 0
 			while seq_len != 0:
 				cur_len = min(128, seq_len)
 				result.append((cur_len - 1).to_bytes(1, "little"))
-				for v in sequence[ seq_i : seq_i + cur_len ]:
+				for v in sequence[seq_i : seq_i + cur_len]:
 					store_val = v.to_bytes(1, "little")
 					if value_op:
 						store_val = value_op(store_val)
@@ -227,7 +227,7 @@ int getPaletteIndexXY(in ivec2 fetch_pos)
 		int line_index = fetch_pos.y * longs_per_line;
 
 		int long_index = line_index + (fetch_pos.x >> 5);
-		int bitmap_long = bitmap[ long_index ];
+		int bitmap_long = bitmap[long_index];
 
 		int bit_index = fetch_pos.x & 0x1f;
 		palette_index = (bitmap_long >> bit_index)& 1;
@@ -281,7 +281,7 @@ int getPaletteIndexXY(in ivec2 fetch_pos)
 		int line_index = fetch_pos.y * longs_per_line;
 
 		int long_index = line_index + (fetch_pos.x >> 3);
-		int bitmap_long = bitmap[ long_index ];
+		int bitmap_long = bitmap[long_index];
 
 		int nibble_index = fetch_pos.x & 0x07;
 		palette_index = (bitmap_long >> (nibble_index << 2))& 0xf;
@@ -294,10 +294,10 @@ int getPaletteIndexXY(in ivec2 fetch_pos)
 
 # https://en.wikipedia.org/wiki/JPEG#Quantization
 QUANT_MTX = [
-	[ 16, 11, 10, 16, ],
-	[ 12, 12, 14, 19, ],
-	[ 14, 13, 16, 24, ],
-	[ 14, 17, 22, 29, ],
+	[16, 11, 10, 16,],
+	[12, 12, 14, 19,],
+	[14, 13, 16, 24,],
+	[14, 17, 22, 29,],
 	]
 
 def get_quantized_dct_block(dct_output_block_size, compressed_dct_block):
@@ -305,8 +305,8 @@ def get_quantized_dct_block(dct_output_block_size, compressed_dct_block):
 	for y in range(dct_output_block_size):
 		quantized_row = []
 		for x in range(dct_output_block_size):
-			unquantized = compressed_dct_block[ y ][ x ]
-			quant_factor = QUANT_MTX[ y ][ x ]
+			unquantized = compressed_dct_block[y][x]
+			quant_factor = QUANT_MTX[y][x]
 			quantized = int(round(unquantized / quant_factor))
 			quantized_row.append(quantized)
 		quantized_block.append(quantized_row)
@@ -317,7 +317,7 @@ def get_quantized_ints_block(dct_output_block_size, quantized_block):
 	for y in range(dct_output_block_size):
 		current_int = 0
 		for x in range(dct_output_block_size):
-			quantized = quantized_block[ y ][ x ]
+			quantized = quantized_block[y][x]
 			print(quantized)
 			contrib = (quantized << (x * 8))& (0xff << (x * 8))
 			print(contrib)
@@ -350,22 +350,22 @@ def process_eight_bit(bmp_data, use_dct):
 		dct_compressed_data = []
 		for y in range(dct_rows):
 			dct_compressed_row = []
-			row_bytes = bmp_data.row_data[ y * dct_input_block_size : (y + 1)* dct_input_block_size ]
+			row_bytes = bmp_data.row_data[y * dct_input_block_size : (y + 1)* dct_input_block_size]
 			for x in range(dct_columns):
 				dct_block_bytes = []
 				for i in range(dct_input_block_size):
-					dct_block_bytes.append(row_bytes[ i ][ x * dct_input_block_size : (x + 1)* dct_input_block_size ])
+					dct_block_bytes.append(row_bytes[i][x * dct_input_block_size : (x + 1)* dct_input_block_size])
 
 				shifted_colors = []
 				for block_bytes in dct_block_bytes:
-					color_vals = [ (sum(bmp_data.palette[ i ])/ 3.0)for i in block_bytes ]
-					shifted_colors.append([ (i - 128)for i in color_vals ])
+					color_vals = [(sum(bmp_data.palette[i])/ 3.0)for i in block_bytes]
+					shifted_colors.append([(i - 128)for i in color_vals])
 
 				dct_block = dct.get_2d_dct(shifted_colors)
 
 				compressed_dct_block = []
 				for i in range(dct_output_block_size):
-					compressed_dct_block.append(dct_block[ i ][ : dct_output_block_size ])
+					compressed_dct_block.append(dct_block[i][: dct_output_block_size])
 
 				dct_compressed_row.append(compressed_dct_block)
 			dct_compressed_data.append(dct_compressed_row)
@@ -373,14 +373,14 @@ def process_eight_bit(bmp_data, use_dct):
 		print("const float[] dct = float[] (")
 		for y in range(dct_rows):
 			for x in range(dct_columns):
-				dct_block = dct_compressed_data[ y ][ x ]
+				dct_block = dct_compressed_data[y][x]
 				print(dct_block)
 				quantized_block = get_quantized_dct_block(dct_output_block_size, dct_block)
 				print(quantized_block)
 				ints_block = get_quantized_ints_block(dct_output_block_size, quantized_block)
 				print(ints_block)
 				# for row_index in range(dct_output_block_size):
-					# print(", ".join(map(str, dct_block[ row_index ]))
+					# print(", ".join(map(str, dct_block[row_index]))
 							# + ("" if (y == (dct_rows - 1)and (x == dct_columns - 1)and (row_index == dct_output_block_size - 1))else ",")
 							#)
 				print()
@@ -391,7 +391,7 @@ def process_eight_bit(bmp_data, use_dct):
 		print("""
 float get_dct_val(in int start, in int x, in int y)
 {
-	return (x < dct_block_size && y < dct_block_size)? dct[ start + y * dct_block_size + x ] : 0. ;
+	return (x < dct_block_size && y < dct_block_size)? dct[start + y * dct_block_size + x] : 0. ;
 }
 
 float c_factor(in int i)
@@ -464,7 +464,7 @@ int getPaletteIndexXY(in ivec2 fetch_pos)
 		int line_index = fetch_pos.y * longs_per_line;
 
 		int long_index = line_index + (fetch_pos.x >> 2);
-		int bitmap_long = bitmap[ long_index ];
+		int bitmap_long = bitmap[long_index];
 
 		int byte_index = fetch_pos.x & 0x03;
 		palette_index = (bitmap_long >> (byte_index << 3))& 0xff;
