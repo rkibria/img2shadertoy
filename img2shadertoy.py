@@ -5,7 +5,9 @@
 Convert image to a Shadertoy script
 """
 
-import os, sys, argparse, logging
+import sys
+import argparse
+import logging
 
 import bmpfile
 import rle
@@ -19,18 +21,21 @@ logger.setLevel(logging.DEBUG)
 
 def output_header(bmp_data):
     print("// Generated with https://github.com/rkibria/img2shadertoy")
-    print("const vec2 bitmap_size = vec2({0}, {1});".format(bmp_data.image_width, bmp_data.image_height))
+    print("const vec2 bitmap_size = vec2({0}, {1});".format(bmp_data.image_width,
+                                                            bmp_data.image_height))
 
 def output_palette(bmp_data):
     print("const int[] palette = int[] (")
     for i in range(bmp_data.palette_size):
         color = bmp_data.palette[i]
-        print("0x00{0:02x}{1:02x}{2:02x}".format(color[2], color[1], color[0])+ ("," if i != bmp_data.palette_size-1 else ""))
+        print("0x00{0:02x}{1:02x}{2:02x}".format(color[2], color[1], color[0])
+              + ("," if i != bmp_data.palette_size-1 else ""))
     print(");")
 
 def reverse_bitmap_order(bmp_data, reverse_type):
     """
-    Reverse reverse_type ("bits"/"nibbles"/"endianness")so we save a subtraction in Shadertoy code to get the right pixel
+    Reverse reverse_type ("bits"/"nibbles"/"endianness")so we save a
+    subtraction in Shadertoy code to get the right pixel
     """
     for i in range(bmp_data.image_height):
         new_row = []
@@ -148,7 +153,7 @@ int get_uncompr_byte(in int byte_index)
 }
 """)
 
-def sequences_to_bytes(seq, value_op = None):
+def sequences_to_bytes(seq, value_op=None):
     """
     Transforms result of rle.get_sequences()into a byte array.
     Encoding:
@@ -350,11 +355,13 @@ def process_eight_bit(bmp_data, use_dct):
         dct_compressed_data = []
         for y in range(dct_rows):
             dct_compressed_row = []
-            row_bytes = bmp_data.row_data[y * dct_input_block_size : (y + 1)* dct_input_block_size]
+            row_bytes = bmp_data.row_data[y * dct_input_block_size
+                                          : (y + 1) * dct_input_block_size]
             for x in range(dct_columns):
                 dct_block_bytes = []
                 for i in range(dct_input_block_size):
-                    dct_block_bytes.append(row_bytes[i][x * dct_input_block_size : (x + 1)* dct_input_block_size])
+                    dct_block_bytes.append(row_bytes[i][x * dct_input_block_size
+                                                        : (x + 1)* dct_input_block_size])
 
                 shifted_colors = []
                 for block_bytes in dct_block_bytes:
@@ -479,8 +486,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("filename", help="path to bmp file")
     parser.add_argument("--rle", help="enable RLE encoding", action="store_true")
-    parser.add_argument("--dct", help="enable DCT encoding (8 bit only, converts to grayscale)", action="store_true")
-    # parser.add_argument("--bw", help="convert to black & white (avoids storing palette)", action="store_true")
+    parser.add_argument("--dct", help="enable DCT encoding (8 bit only, converts to grayscale)",
+                        action="store_true")
+    # parser.add_argument("--bw", help="convert to black & white (avoids storing palette)",
+    #                     action="store_true")
     args = parser.parse_args()
 
     bmp_data = bmpfile.load_bmp(args.filename)
