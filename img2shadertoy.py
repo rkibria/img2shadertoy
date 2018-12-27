@@ -512,7 +512,10 @@ int getPaletteIndexXY(in ivec2 fetch_pos)
 
         output_footer()
 
-if __name__ == '__main__':
+def main():
+    """
+    Run the script
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("filename", help="path to bmp file")
     parser.add_argument("--rle", help="enable RLE encoding", action="store_true")
@@ -536,3 +539,6 @@ if __name__ == '__main__':
         process_eight_bit(bmp_data, args.dct)
     else:
         raise RuntimeError("Current bits per pixel not supported")
+
+if __name__ == '__main__':
+    main()
