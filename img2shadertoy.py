@@ -76,16 +76,14 @@ def output_footer():
     Shadertoy output: bottom of script
     """
     print("""
-int getPaletteIndex(in vec2 uv)
-{
+int getPaletteIndex(in vec2 uv) {
     int palette_index = 0;
     ivec2 fetch_pos = ivec2(uv * bitmap_size);
     palette_index = getPaletteIndexXY(fetch_pos);
     return palette_index;
 }
 
-vec4 getColorFromPalette(in int palette_index)
-{
+vec4 getColorFromPalette(in int palette_index) {
     int int_color = palette[palette_index];
     return vec4(float(int_color & 0xff)/ 255.0,
                 float((int_color >> 8)& 0xff)/ 255.0,
@@ -93,13 +91,11 @@ vec4 getColorFromPalette(in int palette_index)
                 0);
 }
 
-vec4 getBitmapColor(in vec2 uv)
-{
+vec4 getBitmapColor(in vec2 uv) {
     return getColorFromPalette(getPaletteIndex(uv));
 }
 
-void mainImage(out vec4 fragColor, in vec2 fragCoord)
-{
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec2 uv = fragCoord / bitmap_size;
     fragColor = getBitmapColor(uv);
 }
@@ -119,44 +115,35 @@ def output_rle(encoded):
     print(");")
 
     print("""
-const int rle_len_bytes = rle.length()<< 2;
+const int rle_len_bytes = rle.length() << 2;
 
-int get_rle_byte(in int byte_index)
-{
+int get_rle_byte(in int byte_index) {
     int long_val = rle[byte_index >> 2];
     return (long_val >> ((byte_index & 0x03)<< 3))& 0xff;
 }
 
-int get_uncompr_byte(in int byte_index)
-{
+int get_uncompr_byte(in int byte_index) {
     int rle_index = 0;
     int cur_byte_index = 0;
-    while(rle_index < rle_len_bytes)
-    {
+    while(rle_index < rle_len_bytes) {
         int cur_rle_byte = get_rle_byte(rle_index);
         bool is_sequence = int(cur_rle_byte & 0x80)== 0;
         int count = (cur_rle_byte & 0x7f)+ 1;
 
-        if(byte_index >= cur_byte_index && byte_index < cur_byte_index + count)
-        {
-            if(is_sequence)
-            {
+        if(byte_index >= cur_byte_index && byte_index < cur_byte_index + count) {
+            if(is_sequence) {
                 return get_rle_byte(rle_index + 1 + (byte_index - cur_byte_index));
             }
-            else
-            {
+            else{
                 return get_rle_byte(rle_index + 1);
             }
         }
-        else
-        {
-            if(is_sequence)
-            {
+        else {
+            if(is_sequence) {
                 rle_index += count + 1;
                 cur_byte_index += count;
             }
-            else
-            {
+            else {
                 rle_index += 2;
                 cur_byte_index += count;
             }
@@ -220,12 +207,10 @@ def process_one_bit(bmp_data, rle_enabled):
         output_rle(encoded)
 
         print("""
-int getPaletteIndexXY(in ivec2 fetch_pos)
-{
+int getPaletteIndexXY(in ivec2 fetch_pos) {
     int palette_index = 0;
     if(fetch_pos.x >= 0 && fetch_pos.y >= 0
-        && fetch_pos.x < int(bitmap_size.x)&& fetch_pos.y < int(bitmap_size.y))
-    {
+        && fetch_pos.x < int(bitmap_size.x)&& fetch_pos.y < int(bitmap_size.y)) {
         int uncompr_byte_index = fetch_pos.y * (int(bitmap_size.x)>> 3)
             + (fetch_pos.x >> 3);
         int uncompr_byte = get_uncompr_byte(uncompr_byte_index);
@@ -240,12 +225,10 @@ int getPaletteIndexXY(in ivec2 fetch_pos)
         reverse_bitmap_order(bmp_data, "bits")
         output_bitmap(bmp_data)
         print("""
-int getPaletteIndexXY(in ivec2 fetch_pos)
-{
+int getPaletteIndexXY(in ivec2 fetch_pos) {
     int palette_index = 0;
     if(fetch_pos.x >= 0 && fetch_pos.y >= 0
-        && fetch_pos.x < int(bitmap_size.x)&& fetch_pos.y < int(bitmap_size.y))
-    {
+        && fetch_pos.x < int(bitmap_size.x)&& fetch_pos.y < int(bitmap_size.y)) {
         int line_index = fetch_pos.y * longs_per_line;
 
         int long_index = line_index + (fetch_pos.x >> 5);
@@ -275,12 +258,10 @@ def process_four_bit(bmp_data, rle_enabled):
         output_rle(encoded)
 
         print("""
-int getPaletteIndexXY(in ivec2 fetch_pos)
-{
+int getPaletteIndexXY(in ivec2 fetch_pos) {
     int palette_index = 0;
     if(fetch_pos.x >= 0 && fetch_pos.y >= 0
-        && fetch_pos.x < int(bitmap_size.x)&& fetch_pos.y < int(bitmap_size.y))
-    {
+        && fetch_pos.x < int(bitmap_size.x)&& fetch_pos.y < int(bitmap_size.y)) {
         int uncompr_byte_index = fetch_pos.y * (int(bitmap_size.x)>> 1)
             + (fetch_pos.x >> 1);
 
@@ -297,12 +278,10 @@ int getPaletteIndexXY(in ivec2 fetch_pos)
         output_bitmap(bmp_data)
 
         print("""
-int getPaletteIndexXY(in ivec2 fetch_pos)
-{
+int getPaletteIndexXY(in ivec2 fetch_pos) {
     int palette_index = 0;
     if(fetch_pos.x >= 0 && fetch_pos.y >= 0
-        && fetch_pos.x < int(bitmap_size.x)&& fetch_pos.y < int(bitmap_size.y))
-    {
+        && fetch_pos.x < int(bitmap_size.x)&& fetch_pos.y < int(bitmap_size.y)) {
         int line_index = fetch_pos.y * longs_per_line;
 
         int long_index = line_index + (fetch_pos.x >> 3);
