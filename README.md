@@ -14,4 +14,4 @@ Convert image into Shadertoy script that displays it
   * 4 bit image: https://www.shadertoy.com/view/4sGBzm
     * with RLE: https://www.shadertoy.com/view/XsKBDh
   * 8 bit image: https://www.shadertoy.com/view/4dyBzm
-    * with DCT: https://www.shadertoy.com/view/MtycDR
+    * with DCT: https://www.shadertoy.com/view/tsf3D8
