@@ -325,14 +325,16 @@ QUANT_MTX = [
     [14, 17, 22, 29,],
     ]
 
-def get_quantized_dct_block(dct_output_block_size, compressed_dct_block):
+def get_quantized_dct_block(dct_width, compressed_dct_block):
     """
-    Apply quantization matrix
+    Apply quantization matrix.
+    Divides original values by the quantization factor, rounds and converts to int.
+    Results in list of lists.
     """
     quantized_block = []
-    for y_index in range(dct_output_block_size):
+    for y_index in range(dct_width):
         quantized_row = []
-        for x_index in range(dct_output_block_size):
+        for x_index in range(dct_width):
             unquantized = compressed_dct_block[y_index][x_index]
             quant_factor = QUANT_MTX[y_index][x_index]
             quantized = int(round(unquantized / quant_factor))
@@ -340,16 +342,19 @@ def get_quantized_dct_block(dct_output_block_size, compressed_dct_block):
         quantized_block.append(quantized_row)
     return quantized_block
 
-def get_quantized_ints_block(dct_output_block_size, quantized_block):
+def get_quantized_ints_block(dct_width, quantized_block):
     """
-    Shadertoy output: quantized blocks
+    Store quantized block as integers.
+    The 4 float values of each row are stored as 1 byte each in an int.
+    First row value is stored in least significant byte.
+    Results in a list of 4 ints.
     """
     ints_block = []
-    for y_index in range(dct_output_block_size):
+    for y_index in range(dct_width):
         current_int = 0
-        for x_index in range(dct_output_block_size):
+        for x_index in range(dct_width):
             quantized = quantized_block[y_index][x_index]
-            contrib = (quantized << (x_index * 8))& (0xff << (x_index * 8))
+            contrib = (quantized << (x_index * 8)) & (0xff << (x_index * 8))
             current_int |= contrib
         # print(current_int.to_bytes(4, byteorder='big'))
         ints_block.append(current_int)
@@ -360,33 +365,34 @@ def process_eight_bit(bmp_data, use_dct):
     Process 8bpp image
     """
     if use_dct:
-        dct_input_block_size = 8
-        dct_output_block_size = 4
+        dct_pixels = 8  # Each DCT block encodes dct_pixels x dct_pixels
+        dct_width = 4   # Each DCT block contains dct_width values
 
-        if bmp_data.image_height % dct_input_block_size != 0:
-            raise RuntimeError("Image height multiple of %d expected" % dct_input_block_size)
+        if bmp_data.image_height % dct_pixels != 0:
+            raise RuntimeError("Image height multiple of %d expected" % dct_pixels)
 
         output_header(bmp_data)
 
-        dct_columns = bmp_data.image_width // dct_input_block_size
-        dct_rows = bmp_data.image_height // dct_input_block_size
+        dct_cols = bmp_data.image_width // dct_pixels
+        dct_rows = bmp_data.image_height // dct_pixels
 
-        print("#define PI 3.141592653589793")
-        print("const int pixels_per_dct_block = {0};".format(dct_input_block_size))
-        print("const int dct_block_size = {0};".format(dct_output_block_size))
-        print("const int dct_columns = {0};".format(dct_columns))
+        print("#define PI 3.141592653589793\n")
+
+        print("const int dct_pixels = {0};".format(dct_pixels))
+        print("const int dct_width = {0};".format(dct_width))
+        print("const int dct_cols = {0};".format(dct_cols))
         print("const int dct_rows = {0};".format(dct_rows))
 
         dct_compressed_data = []
         for y_index in range(dct_rows):
             dct_compressed_row = []
-            row_bytes = bmp_data.row_data[y_index * dct_input_block_size
-                                          : (y_index + 1) * dct_input_block_size]
-            for x_index in range(dct_columns):
+            row_bytes = bmp_data.row_data[y_index * dct_pixels
+                                          : (y_index + 1) * dct_pixels]
+            for x_index in range(dct_cols):
                 dct_block_bytes = []
-                for i in range(dct_input_block_size):
-                    dct_block_bytes.append(row_bytes[i][x_index * dct_input_block_size
-                                                        : (x_index + 1)* dct_input_block_size])
+                for i in range(dct_pixels):
+                    dct_block_bytes.append(row_bytes[i][x_index * dct_pixels
+                                                        : (x_index + 1)* dct_pixels])
 
                 shifted_colors = []
                 for block_bytes in dct_block_bytes:
@@ -396,28 +402,38 @@ def process_eight_bit(bmp_data, use_dct):
                 dct_block = dct.get_2d_dct(shifted_colors)
 
                 compressed_dct_block = []
-                for i in range(dct_output_block_size):
-                    compressed_dct_block.append(dct_block[i][: dct_output_block_size])
+                for i in range(dct_width):
+                    compressed_dct_block.append(dct_block[i][: dct_width])
 
                 dct_compressed_row.append(compressed_dct_block)
             dct_compressed_data.append(dct_compressed_row)
 
         print("\nconst int[] dct = int[] (")
         for y_index in range(dct_rows):
-            for x_index in range(dct_columns):
+            for x_index in range(dct_cols):
                 dct_block = dct_compressed_data[y_index][x_index]
-                quantized_block = get_quantized_dct_block(dct_output_block_size, dct_block)
-                ints_block = get_quantized_ints_block(dct_output_block_size, quantized_block)
+                quantized_block = get_quantized_dct_block(dct_width, dct_block)
+                ints_block = get_quantized_ints_block(dct_width, quantized_block)
                 print(", ".join(map(str, ints_block))
-                      + ("" if (y_index == (dct_rows - 1) and (x_index == dct_columns - 1))
+                      + ("" if (y_index == (dct_rows - 1) and (x_index == dct_cols - 1))
                          else ","))
             print()
         print(");")
 
         print("""
+const int[] quant_mtx = int[] (
+    16, 11, 10, 16,
+    12, 12, 14, 19,
+    14, 13, 16, 24,
+    14, 17, 22, 29
+);
+
 float get_dct_val(in int start, in int x, in int y)
 {
-    return (x < dct_block_size && y < dct_block_size)? dct[start + y * dct_block_size + x] : 0. ;
+    // dct[start + y * dct_width + x]
+    return (x < dct_width && y < dct_width) ?
+        0.
+        : 0.;
 }
 
 float c_factor(in int i)
@@ -427,17 +443,17 @@ float c_factor(in int i)
 
 float cos_term(in int inner, in int outer)
 {
-    return cos(PI * float(inner)* (2.0 * float(outer)+ 1.0)/ (2.0 * float(pixels_per_dct_block)));
+    return cos(PI * float(inner)* (2.0 * float(outer)+ 1.0)/ (2.0 * float(dct_pixels)));
 }
 
 float get_idct(in int start, in int i, in int j)
 {
-    float NN = float(pixels_per_dct_block);
+    float NN = float(dct_pixels);
     float r = 0.;
 
-    for(int x = 0; x < pixels_per_dct_block; ++x)
+    for(int x = 0; x < dct_pixels; ++x)
     {
-        for(int y = 0; y < pixels_per_dct_block; ++y)
+        for(int y = 0; y < dct_pixels; ++y)
         {
             r += c_factor(x)* c_factor(y)* get_dct_val(start, x, y)* cos_term(x, i)* cos_term(y, j);
         }
@@ -452,15 +468,17 @@ vec4 getBitmapColor(in vec2 uv)
     vec4 col = vec4(0);
     ivec2 fetch_pos = ivec2(uv * bitmap_size);
     if(fetch_pos.x >= 0 && fetch_pos.y >= 0
-        && fetch_pos.x < int(bitmap_size.x)&& fetch_pos.y < int(bitmap_size.y))
+        && fetch_pos.x < int(bitmap_size.x) && fetch_pos.y < int(bitmap_size.y))
     {
-        int dct_row = fetch_pos.y / pixels_per_dct_block;
-        int dct_col = fetch_pos.x / pixels_per_dct_block;
-        const int values_per_dct_block = dct_block_size * dct_block_size;
-        int dct_values_per_row = values_per_dct_block * dct_columns;
-        int dct_block_index = dct_row * dct_values_per_row + dct_col * values_per_dct_block;
-        int pixel_x = fetch_pos.x % pixels_per_dct_block;
-        int pixel_y = fetch_pos.y % pixels_per_dct_block;
+        int dct_row = fetch_pos.y / dct_pixels;
+        int dct_col = fetch_pos.x / dct_pixels;
+
+        int dct_values_per_row = dct_width * dct_cols;
+        int dct_block_index = dct_row * dct_values_per_row + dct_col * dct_width;
+
+        int pixel_x = fetch_pos.x % dct_pixels;
+        int pixel_y = fetch_pos.y % dct_pixels;
+
         float idct = get_idct(dct_block_index, pixel_x, pixel_y);
         col = vec4((idct + 128.)/ 255.);
     }
