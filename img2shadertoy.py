@@ -428,33 +428,34 @@ const int[] quant_mtx = int[] (
     14, 17, 22, 29
 );
 
-float get_dct_val(in int start, in int x, in int y)
-{
-    // dct[start + y * dct_width + x]
-    return (x < dct_width && y < dct_width) ?
-        0.
-        : 0.;
+float get_dct_val(in int start, in int x, in int y) {
+    if(x < dct_width && y < dct_width) {
+        int int_block = dct[start + y];
+        int quant_val = (int_block >> (x << 3)) & 0xff;
+        if(quant_val > 127)
+            quant_val = -256 + quant_val;
+        float quant_factor = float(quant_mtx[(y << 2) + x]);
+        float unquant_val = float(quant_val) * quant_factor;
+        return unquant_val;
+    }
+    else
+        return 0.;
 }
 
-float c_factor(in int i)
-{
+float c_factor(in int i) {
     return (i == 0)?  (1.0 / sqrt(2.0)): 1.0;
 }
 
-float cos_term(in int inner, in int outer)
-{
+float cos_term(in int inner, in int outer) {
     return cos(PI * float(inner)* (2.0 * float(outer)+ 1.0)/ (2.0 * float(dct_pixels)));
 }
 
-float get_idct(in int start, in int i, in int j)
-{
+float get_idct(in int start, in int i, in int j) {
     float NN = float(dct_pixels);
     float r = 0.;
 
-    for(int x = 0; x < dct_pixels; ++x)
-    {
-        for(int y = 0; y < dct_pixels; ++y)
-        {
+    for(int x = 0; x < dct_pixels; ++x) {
+        for(int y = 0; y < dct_pixels; ++y) {
             r += c_factor(x)* c_factor(y)* get_dct_val(start, x, y)* cos_term(x, i)* cos_term(y, j);
         }
     }
@@ -463,13 +464,11 @@ float get_idct(in int start, in int i, in int j)
     return r;
 }
 
-vec4 getBitmapColor(in vec2 uv)
-{
+vec4 getBitmapColor(in vec2 uv) {
     vec4 col = vec4(0);
     ivec2 fetch_pos = ivec2(uv * bitmap_size);
     if(fetch_pos.x >= 0 && fetch_pos.y >= 0
-        && fetch_pos.x < int(bitmap_size.x) && fetch_pos.y < int(bitmap_size.y))
-    {
+        && fetch_pos.x < int(bitmap_size.x) && fetch_pos.y < int(bitmap_size.y)) {
         int dct_row = fetch_pos.y / dct_pixels;
         int dct_col = fetch_pos.x / dct_pixels;
 
@@ -485,8 +484,7 @@ vec4 getBitmapColor(in vec2 uv)
     return col;
 }
 
-void mainImage(out vec4 fragColor, in vec2 fragCoord)
-{
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec2 uv = fragCoord / iResolution.y;
     fragColor = getBitmapColor(uv);
 }
