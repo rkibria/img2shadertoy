@@ -30,7 +30,7 @@ def load_bmp(filepath):
     """
     with open(filepath, "rb") as binary_file:
         data = binary_file.read()
-        LOGGER.info("Read file %s into memory", filepath)
+        LOGGER.info("Read file %s", filepath)
 
     header_text = data[0:2].decode('utf-8')
     LOGGER.info("BMP header %s", header_text)

@@ -401,10 +401,10 @@ def process_eight_bit(bmp_data, use_dct):
 
         print("""
 const int[] quant_mtx = int[] (
-    16, 11, 10, 16,
-    12, 12, 14, 19,
-    14, 13, 16, 24,
-    14, 17, 22, 29
+0x100a0b10,
+0x130e0c0c,
+0x18100d0e,
+0x1d16110e
 );
 
 float get_dct_val(in int start, in int x, in int y) {
@@ -413,7 +413,7 @@ float get_dct_val(in int start, in int x, in int y) {
         int quant_val = (int_block >> (x << 3)) & 0xff;
         if(quant_val > 127)
             quant_val = -256 + quant_val;
-        float quant_factor = float(quant_mtx[(y << 2) + x]);
+        float quant_factor = float((quant_mtx[y] >> (x << 3)) & 0xff);
         float unquant_val = float(quant_val) * quant_factor;
         return unquant_val;
     }
@@ -422,11 +422,11 @@ float get_dct_val(in int start, in int x, in int y) {
 }
 
 float c_factor(in int i) {
-    return (i == 0)?  (1.0 / sqrt(2.0)): 1.0;
+    return (i == 0) ? (1.0 / sqrt(2.0)) : 1.0;
 }
 
 float cos_term(in int inner, in int outer) {
-    return cos(PI * float(inner)* (2.0 * float(outer)+ 1.0)/ (2.0 * float(dct_pixels)));
+    return cos(PI * float(inner) * (2.0 * float(outer) + 1.0) / (2.0 * float(dct_pixels)));
 }
 
 float get_idct(in int start, in int i, in int j) {
@@ -435,7 +435,7 @@ float get_idct(in int start, in int i, in int j) {
 
     for(int x = 0; x < dct_pixels; ++x) {
         for(int y = 0; y < dct_pixels; ++y) {
-            r += c_factor(x)* c_factor(y)* get_dct_val(start, x, y)* cos_term(x, i)* cos_term(y, j);
+            r += c_factor(x) * c_factor(y) * get_dct_val(start, x, y) * cos_term(x, i) * cos_term(y, j);
         }
     }
 
@@ -480,7 +480,7 @@ int getPaletteIndexXY(in ivec2 fetch_pos)
 {
     int palette_index = 0;
     if(fetch_pos.x >= 0 && fetch_pos.y >= 0
-        && fetch_pos.x < int(bitmap_size.x)&& fetch_pos.y < int(bitmap_size.y))
+        && fetch_pos.x < int(bitmap_size.x) && fetch_pos.y < int(bitmap_size.y))
     {
         int line_index = fetch_pos.y * longs_per_line;
 
@@ -488,7 +488,7 @@ int getPaletteIndexXY(in ivec2 fetch_pos)
         int bitmap_long = bitmap[long_index];
 
         int byte_index = fetch_pos.x & 0x03;
-        palette_index = (bitmap_long >> (byte_index << 3))& 0xff;
+        palette_index = (bitmap_long >> (byte_index << 3)) & 0xff;
     }
     return palette_index;
 }
